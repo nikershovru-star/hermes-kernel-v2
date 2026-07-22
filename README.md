@@ -66,6 +66,26 @@ text parsing) is stdlib-only. End-to-end verified in
 
 ---
 
+## Persistence & Multi-tenancy (P5)
+
+The kernel is multi-tenant: users authenticate, operations are gated by RBAC,
+and state survives restart in a workspace-isolated store. All stdlib
+(`hashlib`, `sqlite3`) — no heavy deps. See
+[ADR-005](docs/adr/ADR-005-multi-tenancy.md).
+
+| Layer | Module | Responsibility |
+|-------|--------|----------------|
+| Auth | `kernel/auth.py` | `User`, `AuthRegistry`, pbkdf2-hash passwords (no plaintext) |
+| RBAC | `kernel/rbac.py` | `Permission`, `Role`, `require_permission` guard |
+| Persistence | `kernel/persistence.py` | SQLite async CRUD, workspace-isolated JSON store |
+
+RBAC is a **guard** (`require_permission` before a registry call), not a
+wrapper — see `tests/test_rbac.py`. Persistence composes with `WorkspaceRegistry`
+(save/load), `KnowledgeGraph` (persist/load) and `FileScanner` (DB-backed
+de-duplication) without rewriting them.
+
+---
+
 ## Quick start
 
 ```bash
@@ -118,6 +138,8 @@ Decisions are recorded as ADRs:
   MCP client/server, `MCPToolAdapter`.
 - [ADR-004 — Knowledge Pipeline](docs/adr/ADR-004-knowledge-pipeline.md) —
   5 event-driven stages, workspace isolation, similarity linking.
+- [ADR-005 — Multi-tenancy](docs/adr/ADR-005-multi-tenancy.md) —
+  Auth (P5.1), RBAC (P5.2), Persistent Storage (P5.3).
 
 ---
 
@@ -132,7 +154,7 @@ See [docs/roadmap.md](docs/roadmap.md) for full phase status.
 | P2 | Knowledge Pipeline | ✅ |
 | P3 | MCP + SDK | ✅ |
 | P4 | MCP Server | ✅ (SSE pending) |
-| P5 | Multi-tenancy | ⏳ |
+| P5 | Multi-tenancy | ✅ |
 
 ---
 
