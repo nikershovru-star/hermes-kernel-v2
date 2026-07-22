@@ -1,0 +1,5 @@
+name: filesystem
+version: 0.1.0
+capabilities: [hermes.fs.read, hermes.fs.write]
+entrypoint: plugins.builtin.filesystem:FilesystemPlugin
+dependencies: []

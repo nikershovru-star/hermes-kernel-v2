@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hermes-kernel-v2"
+version = "0.1.0"
+description = "Hermes Kernel v2 — async-first, event-driven knowledge OS kernel"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "anyio>=4.4",
+    "import-linter>=2.0",   # axis-of-dependency CI gate
+    "pyyaml>=6.0",          # plugin manifests (plugins/loader.py)
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8.0", "pytest-asyncio>=0.23", "pytest-cov>=5.0"]
+dev = ["ruff>=0.5", "tach>=0.7"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.tach]
+# Axis-of-dependency contract (enforced in CI):
+#   interface (mcp) -> service (runtime, later) -> kernel -> domain
+# domain must NOT import from kernel/plugins/mcp.
+modules = [
+    { path = "kernel.domain", depends_on = [] },
+    { path = "kernel", depends_on = ["kernel.domain"] },
+    { path = "plugins", depends_on = ["kernel"] },
+    { path = "mcp", depends_on = ["kernel"] },
+]
+exclude = ["tests", "docs"]

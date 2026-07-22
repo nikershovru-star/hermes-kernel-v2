@@ -1,0 +1,25 @@
+# Hermes Kernel v2 — minimal core configuration
+kernel:
+  name: hermes-kernel-v2
+  version: 0.1.0
+  single_tenant: true          # multi-tenant via Workspace layer later (ADR-011)
+  event_bus:
+    delivery: at-least-once    # in-memory; persistence later
+    default_wait_timeout: 30.0
+  consistency:
+    model: eventual            # sync barrier for critical paths via bus.wait_for
+
+plugins:
+  auto_load_paths:
+    - ./plugins
+    - ~/.hermes/plugins
+  validate_manifest: true
+
+interfaces:
+  mcp:
+    enabled: true              # MCP is the first interface
+    transport: stdio
+    # server.py implemented in next iteration
+
+logging:
+  level: INFO
