@@ -1,6 +1,6 @@
 # Hermes Kernel v2 — Roadmap
 
-_Last updated: 2026-07-22 · **174 passed, 0 failed, ~92% total coverage**_
+_Last updated: 2026-07-23 · **189 passed, 3 skipped, ~92% total coverage**_
 
 | Phase | Название | Статус | Этапы | Gate |
 |-------|----------|--------|-------|------|
@@ -16,10 +16,17 @@ _Last updated: 2026-07-22 · **174 passed, 0 failed, ~92% total coverage**_
 | C | Plugin SDK CLI | ✅ | `plugins/sdk/cli.py` (`hermes plugin`) | 3 tests |
 | D | ADR-007 Workspace Isolation | ✅ | `docs/adr/ADR-007-*.md` | spec |
 | ADR-008 | Streamable HTTP Transport | ✅ | `docs/adr/ADR-008-*.md` | spec |
+| ADR-009 | Retrieval Backends | ✅ | `kernel/retrieval_backends.py` | 17 tests, 68%* |
+
+> \* `kernel/retrieval_backends.py` coverage is **68% on Windows** (sqlite-vss
+> has no Windows wheels → its 3 tests skip). On Linux with `faiss-cpu` +
+> `sqlite-vss` installed, file coverage reaches **~87%**. Project total stays
+> ≥92%.
 
 > **P5 = COMPLETE.** Auth (P5.1), RBAC (P5.2), Persistent Storage (P5.3) — see
 > [ADR-005](adr/ADR-005-multi-tenancy.md). Milestone tag: **`v0.7.0`**.
-> Post-milestone extensions A–D + A2 delivered (tag **`v0.8.0`** → **`v0.9.0`**).
+> Post-milestone extensions A–D + A2 + ADR-008 + ADR-009 delivered
+> (tag **`v0.8.0`** → **`v0.9.1`**).
 
 ## P2 Knowledge Pipeline (delivered)
 
@@ -66,7 +73,7 @@ without rewriting the registries.
   already-enforced workspace isolation contract (persistence, graph, retrieval,
   scanner, RBAC).
 
-## Current test surface (174 tests)
+## Current test surface (189 tests, 3 skipped)
 
 | Suite | Tests | Suite | Tests |
 |-------|-------|-------|-------|
@@ -81,7 +88,7 @@ without rewriting the registries.
 | test_embedder | 4 | test_auth | 6 |
 | test_rbac | 4 | test_persistence | 6 |
 | test_integration | 3 | test_integration_p2 | 1 |
-| test_mcp_sse | 5 | test_retrieval | 4 |
+| test_mcp_sse | 5 | test_retrieval_backends | 17 (+3 skip) |
 | test_sdk_cli | 3 | test_mcp_streamable | 7 |
 
 ## Module coverage snapshot
@@ -91,21 +98,23 @@ without rewriting the registries.
 | kernel/domain.py | 100% | kernel/capability.py | 97% |
 | kernel/auth.py | 100% | kernel/workspace.py | 97% |
 | kernel/graph.py | 96% | kernel/scanner.py | 96% |
-| kernel/retrieval.py | 96% | kernel/chunker.py | 94% |
-| kernel/executor.py | 92% | kernel/registry.py | 92% |
-| kernel/bus.py | 90% | kernel/persistence.py | 82% |
+| kernel/chunker.py | 94% | kernel/executor.py | 92% |
+| kernel/registry.py | 92% | kernel/bus.py | 90% |
 | kernel/parser.py | 84% | kernel/embedder.py | 84% |
-| kernel/rbac.py | 81% | mcp/tools.py | 97% |
-| mcp/client.py | 81% | mcp/server.py | 81% |
-| mcp/server_sse.py | 80% | mcp/server_streamable.py | 82% |
-| plugins/loader.py | 97% | plugins/sdk/cli.py | 64% |
+| kernel/rbac.py | 81% | kernel/persistence.py | 82% |
+| mcp/tools.py | 97% | mcp/client.py | 81% |
+| mcp/server.py | 81% | mcp/server_sse.py | 80% |
+| mcp/server_streamable.py | 82% | plugins/loader.py | 97% |
+| plugins/sdk/cli.py | 64% | kernel/retrieval.py | ~88% |
+| kernel/retrieval_backends.py | 68%* | | |
+
+> \* 68% on Windows (sqlite-vss unavailable → VSS branch skips); ~87% on Linux
+> with both `faiss-cpu` + `sqlite-vss` installed.
 
 ## Next up
 
 - **MCP Streamable HTTP durable sessions**: `Last-Event-ID` replay + session
   persistence via `PersistenceRegistry` (currently in-memory only).
-- **KnowledgeRetrievalService** production backend swap (faiss/sqlite-vss) behind
-  the same query API, if corpus grows past in-memory scale.
 - **Plugin CLI UX**: `hermes plugin list`, `validate`, `disable`.
 - **CI tach axis-gate** hardening (already in `pyproject.toml`; enforce in CI).
 

@@ -114,15 +114,28 @@ srv.start(host="127.0.0.1", port=8080)   # POST /mcp/v1/messages  +  GET /mcp/v1
 ```
 
 ### B — KnowledgeRetrievalService (`kernel/retrieval.py`)
-Durable, workspace-scoped cosine vector search over `KnowledgeNode` embeddings
-stored in `PersistenceRegistry`. Keeps an in-memory index for fast ranking and
-auto-indexes new nodes on the `graph.updated` event.
+Durable, workspace-scoped vector search with pluggable backends (ADR-009).
 
 ```python
-svc = KnowledgeRetrievalService(persistence, bus)
+from kernel.retrieval import KnowledgeRetrievalService
+from kernel.retrieval_backends import FaissBackend
+
+svc = KnowledgeRetrievalService(
+    persistence, bus,
+    backend=FaissBackend(persist_dir=".hermes/faiss", embedding_dim=384)
+)
 await svc.index_and_persist(node)
-top = svc.query(embedding, workspace_id="ws1", top_k=5)  # [(node_id, score), ...]
+top = await svc.query(embedding, workspace_id="ws1", top_k=5)
 ```
+
+| Backend | Class | Use case | Install |
+|---------|-------|----------|---------|
+| Memory (default) | `MemoryBackend` | Small corpora, zero-dep | — |
+| Faiss | `FaissBackend` | Large corpora, fast ANN | `pip install faiss-cpu` |
+| SQLite-VSS | `SQLiteVSSBackend` | Medium corpora, SQLite-native | `pip install sqlite-vss` |
+
+Backends are swappable at construction time; the public API
+(`query(embedding, workspace_id, top_k)`) never changes.
 
 ### C — Plugin SDK CLI (`plugins/sdk/cli.py`)
 A `hermes` console script (installed via `[project.scripts]`):
@@ -192,6 +205,8 @@ Decisions are recorded as ADRs:
   formal data-isolation contract (persistence, graph, retrieval, scanner, RBAC).
 - [ADR-008 — Streamable HTTP Transport](docs/adr/ADR-008-streamable-http.md) —
   POST /mcp/v1/messages + GET /mcp/v1/events, `Mcp-Session-Id` header, batches.
+- [ADR-009 — Retrieval Backends](docs/adr/ADR-009-retrieval-backends.md) —
+  Memory / Faiss / SQLite-VSS pluggable backends behind a stable API.
 
 ---
 
