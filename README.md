@@ -86,6 +86,41 @@ de-duplication) without rewriting them.
 
 ---
 
+## Extensions: SSE, Retrieval, CLI (post-v0.7.0)
+
+### A — SSE transport for MCP (`mcp/server_sse.py`)
+`MCPServerSSE` bridges the stdio `MCPServer` JSON-RPC core to the SSE transport:
+`GET /sse` opens a `text/event-stream` and emits an `endpoint` event;
+`POST /messages/?sessionId=...` carries JSON-RPC, responses stream back. Pure
+stdlib (`http.server` + a dedicated asyncio loop) — no FastAPI/uvicorn.
+
+```python
+srv = MCPServerSSE(tool_registry, event_bus)
+srv.set_handler("echo", lambda a: f"got:{a.get('v')}")
+srv.start(host="127.0.0.1", port=8080)   # GET /sse  +  POST /messages/
+```
+
+### B — KnowledgeRetrievalService (`kernel/retrieval.py`)
+Durable, workspace-scoped cosine vector search over `KnowledgeNode` embeddings
+stored in `PersistenceRegistry`. Keeps an in-memory index for fast ranking and
+auto-indexes new nodes on the `graph.updated` event.
+
+```python
+svc = KnowledgeRetrievalService(persistence, bus)
+await svc.index_and_persist(node)
+top = svc.query(embedding, workspace_id="ws1", top_k=5)  # [(node_id, score), ...]
+```
+
+### C — Plugin SDK CLI (`plugins/sdk/cli.py`)
+A `hermes` console script (installed via `[project.scripts]`):
+
+```bash
+hermes plugin init myplugin     # scaffold myplugin.py + plugin.yaml
+hermes plugin watch ./plugins   # hot-reload changed modules (polling, no watchdog)
+```
+
+---
+
 ## Quick start
 
 ```bash
@@ -99,7 +134,7 @@ python -m pytest tests/ -v
 python -m pytest tests/ --cov=kernel --cov=plugins --cov=mcp --cov-report=term-missing
 ```
 
-Expected: **113 passed**.
+Expected: **169 passed**.
 
 > **Note:** always invoke pytest as `python -m pytest` so it resolves against the
 > active venv interpreter (a bare `pip`/`pytest` may bind to a different Python).
@@ -110,14 +145,14 @@ Expected: **113 passed**.
 
 ```
 hermes-kernel-v2/
-├── kernel/            # core (domain, bus, registry, capability, executor, workspace)
+├── kernel/            # core (domain, bus, registry, capability, executor, workspace, retrieval)
 ├── plugins/
 │   ├── base.py        # BasePlugin ABC
 │   ├── loader.py      # fault-tolerant plugin loader
 │   ├── sdk/           # declarative authoring SDK (@agent/@tool/@on_event/@capability)
 │   └── builtin/       # example plugins (filesystem)
-├── mcp/               # client.py, server.py, tools.py (MCPToolAdapter)
-├── tests/             # 113 tests across 13 suites
+├── mcp/               # client.py, server.py, server_sse.py, tools.py (MCPToolAdapter)
+├── tests/             # 169 tests across 16 suites
 ├── docs/
 │   ├── adr/           # architectural decision records
 │   └── roadmap.md     # phase status + coverage
@@ -140,6 +175,8 @@ Decisions are recorded as ADRs:
   5 event-driven stages, workspace isolation, similarity linking.
 - [ADR-005 — Multi-tenancy](docs/adr/ADR-005-multi-tenancy.md) —
   Auth (P5.1), RBAC (P5.2), Persistent Storage (P5.3).
+- [ADR-007 — Workspace Isolation](docs/adr/ADR-007-workspace-isolation.md) —
+  formal data-isolation contract (persistence, graph, retrieval, scanner, RBAC).
 
 ---
 
@@ -153,8 +190,12 @@ See [docs/roadmap.md](docs/roadmap.md) for full phase status.
 | P1 | Runtime + Capability | ✅ |
 | P2 | Knowledge Pipeline | ✅ |
 | P3 | MCP + SDK | ✅ |
-| P4 | MCP Server | ✅ (SSE pending) |
+| P4 | MCP Server | ✅ |
 | P5 | Multi-tenancy | ✅ |
+| A | SSE transport | ✅ |
+| B | KnowledgeRetrievalService | ✅ |
+| C | Plugin SDK CLI | ✅ |
+| D | ADR-007 Workspace Isolation | ✅ |
 
 ---
 
