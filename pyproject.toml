@@ -2,6 +2,11 @@
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel]
+# project name (hermes-kernel-v2) doesn't match a single package dir, so list
+# the top-level packages explicitly for hatchling to ship.
+packages = ["kernel", "plugins", "mcp"]
+
 [project]
 name = "hermes-kernel-v2"
 version = "0.1.0"
