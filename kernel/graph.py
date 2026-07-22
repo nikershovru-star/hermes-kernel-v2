@@ -50,7 +50,39 @@ class KnowledgeGraph:
         # node_id -> list[Relation]
         self._edges: dict[str, list[Relation]] = {}
 
-    # -- graph ops -------------------------------------------------------- #
+    # -- persistence integration (P5.3) ----------------------------------- #
+    async def persist_into(self, persistence, workspace_id: str) -> int:
+        """Save all nodes + relations for ``workspace_id``. Returns count."""
+        saved = 0
+        for nid, node in self._nodes.items():
+            if node.domain != workspace_id:
+                continue
+            # carry the embedding in properties so it survives JSON round-trip
+            node.properties["embedding"] = self._embeddings.get(nid, [])
+            await persistence.save(node)
+            for edge in self._edges.get(nid, []):
+                await persistence.save(edge)
+                saved += 1
+            saved += 1
+        return saved
+
+    async def load_from_db(self, persistence, workspace_id: str) -> int:
+        """Load nodes + relations for ``workspace_id`` from DB. Returns nodes."""
+        nodes = await persistence.list(workspace_id, entity_type="KnowledgeNode")
+        relations = await persistence.list(workspace_id, entity_type="Relation")
+        loaded = 0
+        for node in nodes:
+            self._nodes[node.id] = node
+            self._embeddings[node.id] = node.properties.pop("embedding", [])
+            self._edges.setdefault(node.id, [])
+            loaded += 1
+        rel_by_src: dict[str, list] = {}
+        for rel in relations:
+            rel_by_src.setdefault(rel.source_id, []).append(rel)
+        for nid, rels in rel_by_src.items():
+            if nid in self._edges:
+                self._edges[nid] = rels
+        return loaded
     def add_node(self, chunk: Chunk) -> KnowledgeNode:
         """Materialise a chunk as a KnowledgeNode and link it to similar nodes."""
         embedding = chunk.embedding or []

@@ -48,6 +48,7 @@ class FileScanner:
         extensions: tuple[str, ...] | list[str] = DEFAULT_EXTENSIONS,
         recursive: bool = True,
         interval: float = 1.0,
+        persistence: Any | None = None,
     ) -> None:
         self.workspace_id = workspace_id
         self.paths = [Path(p) for p in paths]
@@ -58,6 +59,7 @@ class FileScanner:
         }
         self.recursive = recursive
         self.interval = interval
+        self._persistence = persistence
         self._running = False
         self._task: asyncio.Task | None = None
         # remember already-seen files so watch mode only emits new ones
@@ -88,11 +90,22 @@ class FileScanner:
         )
 
     # -- public API ------------------------------------------------------- #
-    def scan_once(self) -> list[Event]:
-        """One synchronous sweep. Returns the events (also published)."""
+    def scan_once(self, skip_persisted: bool = True) -> list[Event]:
+        """One synchronous sweep. Returns the events (also published).
+
+        When ``persistence`` is configured, files whose path is already stored
+        in the DB (document_scanned marker) are skipped unless
+        ``skip_persisted`` is False.
+        """
         events: list[Event] = []
         for p in self._iter_files():
             key = str(p.resolve())
+            if skip_persisted and self._persistence is not None:
+                # a path already recorded -> treat as seen, skip emitting
+                marker = f"scanned:{key}"
+                if self._persistence._contains_marker(marker):
+                    self._seen.add(key)
+                    continue
             evt = self._make_event(p)
             events.append(evt)
             self._seen.add(key)

@@ -101,3 +101,28 @@ class WorkspaceRegistry:
             prev = self._active_id
             self._active_id = workspace_id
             return prev
+
+    # -- persistence integration (P5.3) ----------------------------------- #
+    async def save_to_db(self, persistence) -> int:
+        """Persist all in-memory workspaces. Returns count saved."""
+        saved = 0
+        for w in list(self._workspaces.values()):
+            await persistence.save(w)
+            saved += 1
+        return saved
+
+    async def load_from_db(self, persistence) -> int:
+        """Load workspaces from DB into the registry. Returns count loaded.
+
+        Loaded workspaces are merged; if a workspace with the same id already
+        exists in memory it is overwritten by the DB copy.
+        """
+        rows = await persistence.list_all(entity_type="Workspace")
+        loaded = 0
+        async with self._lock:
+            for w in rows:
+                self._workspaces[w.id] = w
+                loaded += 1
+            if self._active_id is None and self._workspaces:
+                self._active_id = next(iter(self._workspaces))
+        return loaded
