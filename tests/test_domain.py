@@ -26,6 +26,7 @@ def _make(entity_name: str) -> d.BaseEntity:
         "Workspace": dict(name="ws", owner_id="u1", settings={}),
         "Dataset": dict(name="ds", source="s3", format="csv"),
         "Conversation": dict(title="t", messages=[{"role": "user", "content": "x"}]),
+        "User": dict(username="alice", hashed_password="salt$hash", roles=["admin"]),
     }
     return d.ENTITY_TYPES[entity_name](**cases[entity_name])
 

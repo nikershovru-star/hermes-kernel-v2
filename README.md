@@ -32,6 +32,40 @@ axis (`import-linter`). See [`docs/adr/`](docs/adr/).
 
 ---
 
+## Knowledge Pipeline (P2)
+
+Raw files become a queryable knowledge graph through five independent,
+event-driven, workspace-scoped stages — each subscribes to the previous stage's
+event and publishes its own (no direct coupling). See
+[ADR-004](docs/adr/ADR-004-knowledge-pipeline.md).
+
+```
+ ┌───────────────┐  document.scanned   ┌────────────────┐  document.parsed
+ │  FileScanner  │ ──────────────────▶ │ DocumentParser │ ─────────────────┐
+ └───────────────┘                     └────────────────┘                  │
+                                                                           ▼
+ ┌────────────────┐  chunk.embedded   ┌───────────────┐  chunk.created  ┌──────────────────┐
+ │ KnowledgeGraph │ ◀──────────────── │ ChunkEmbedder │ ◀────────────── │  DocumentChunker │
+ └───────┬────────┘                   └───────────────┘                 └──────────────────┘
+         │ graph.updated
+         ▼
+   (node_id, edges, workspace_id)
+```
+
+| Stage | Does | Optional dep |
+|-------|------|--------------|
+| `FileScanner` | polling watch, emits scanned files | — (no watchdog) |
+| `DocumentParser` | extract text by MIME type | `pdfminer.six` (PDF) |
+| `DocumentChunker` | sliding-window chunks w/ overlap | — |
+| `ChunkEmbedder` | vector embeddings | `sentence-transformers` |
+| `KnowledgeGraph` | cosine-similarity linking, workspace-isolated | — |
+
+Heavy deps are lazily imported and optional; the default path (hash embeddings,
+text parsing) is stdlib-only. End-to-end verified in
+`tests/test_integration_p2.py` (real `.md` → 10 nodes, 8 edges).
+
+---
+
 ## Quick start
 
 ```bash
@@ -82,6 +116,8 @@ Decisions are recorded as ADRs:
   `BasePlugin`, loader, `plugin.yaml` manifest, Plugin SDK.
 - [ADR-003 — MCP Integration](docs/adr/ADR-003-mcp-integration.md) —
   MCP client/server, `MCPToolAdapter`.
+- [ADR-004 — Knowledge Pipeline](docs/adr/ADR-004-knowledge-pipeline.md) —
+  5 event-driven stages, workspace isolation, similarity linking.
 
 ---
 
@@ -93,7 +129,7 @@ See [docs/roadmap.md](docs/roadmap.md) for full phase status.
 |-------|------|--------|
 | P0 | Kernel Core | ✅ |
 | P1 | Runtime + Capability | ✅ |
-| P2 | Knowledge Pipeline | ⏳ |
+| P2 | Knowledge Pipeline | ✅ |
 | P3 | MCP + SDK | ✅ |
 | P4 | MCP Server | ✅ (SSE pending) |
 | P5 | Multi-tenancy | ⏳ |

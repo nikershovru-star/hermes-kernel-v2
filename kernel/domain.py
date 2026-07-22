@@ -209,6 +209,14 @@ class Conversation(BaseEntity):
     messages: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class User(BaseEntity):
+    """Authenticated principal (P5 multi-tenancy)."""
+
+    username: str
+    hashed_password: str = ""  # pbkdf2 "salt$hash" (never store plaintext)
+    roles: list[str] = Field(default_factory=list)
+
+
 # Convenience registry for tests / loaders
 ENTITY_TYPES = {
     "Document": Document,
@@ -228,4 +236,5 @@ ENTITY_TYPES = {
     "Workspace": Workspace,
     "Dataset": Dataset,
     "Conversation": Conversation,
+    "User": User,
 }
