@@ -86,7 +86,7 @@ de-duplication) without rewriting them.
 
 ---
 
-## Extensions: SSE, Retrieval, CLI (post-v0.7.0)
+## Extensions: SSE, Streamable HTTP, Retrieval, CLI (post-v0.7.0)
 
 ### A — SSE transport for MCP (`mcp/server_sse.py`)
 `MCPServerSSE` bridges the stdio `MCPServer` JSON-RPC core to the SSE transport:
@@ -98,6 +98,19 @@ stdlib (`http.server` + a dedicated asyncio loop) — no FastAPI/uvicorn.
 srv = MCPServerSSE(tool_registry, event_bus)
 srv.set_handler("echo", lambda a: f"got:{a.get('v')}")
 srv.start(host="127.0.0.1", port=8080)   # GET /sse  +  POST /messages/
+```
+
+### A2 — Streamable HTTP transport for MCP (`mcp/server_streamable.py`)
+The modern MCP HTTP shape (see [ADR-008](docs/adr/ADR-008-streamable-http.md)):
+`POST /mcp/v1/messages` carries JSON-RPC and returns the response **in the POST
+body** (HTTP 200); `GET /mcp/v1/events` is a server→client SSE stream for
+notifications. Sessions use the `Mcp-Session-Id` header (not a query param),
+and JSON-RPC batches (`requests: [...]`) are aggregated. Pure stdlib.
+
+```python
+srv = MCPServerStreamable(tool_registry, event_bus)
+srv.set_handler("echo", lambda a: f"got:{a.get('v')}")
+srv.start(host="127.0.0.1", port=8080)   # POST /mcp/v1/messages  +  GET /mcp/v1/events
 ```
 
 ### B — KnowledgeRetrievalService (`kernel/retrieval.py`)
@@ -134,7 +147,7 @@ python -m pytest tests/ -v
 python -m pytest tests/ --cov=kernel --cov=plugins --cov=mcp --cov-report=term-missing
 ```
 
-Expected: **169 passed**.
+Expected: **174 passed**.
 
 > **Note:** always invoke pytest as `python -m pytest` so it resolves against the
 > active venv interpreter (a bare `pip`/`pytest` may bind to a different Python).
@@ -151,8 +164,8 @@ hermes-kernel-v2/
 │   ├── loader.py      # fault-tolerant plugin loader
 │   ├── sdk/           # declarative authoring SDK (@agent/@tool/@on_event/@capability)
 │   └── builtin/       # example plugins (filesystem)
-├── mcp/               # client.py, server.py, server_sse.py, tools.py (MCPToolAdapter)
-├── tests/             # 169 tests across 16 suites
+├── mcp/               # client.py, server.py, server_sse.py, server_streamable.py, tools.py
+├── tests/             # 174 tests across 17 suites
 ├── docs/
 │   ├── adr/           # architectural decision records
 │   └── roadmap.md     # phase status + coverage
@@ -177,6 +190,8 @@ Decisions are recorded as ADRs:
   Auth (P5.1), RBAC (P5.2), Persistent Storage (P5.3).
 - [ADR-007 — Workspace Isolation](docs/adr/ADR-007-workspace-isolation.md) —
   formal data-isolation contract (persistence, graph, retrieval, scanner, RBAC).
+- [ADR-008 — Streamable HTTP Transport](docs/adr/ADR-008-streamable-http.md) —
+  POST /mcp/v1/messages + GET /mcp/v1/events, `Mcp-Session-Id` header, batches.
 
 ---
 

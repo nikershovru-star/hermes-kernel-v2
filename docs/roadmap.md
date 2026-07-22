@@ -1,6 +1,6 @@
 # Hermes Kernel v2 — Roadmap
 
-_Last updated: 2026-07-22 · **169 passed, 0 failed, ~92% total coverage**_
+_Last updated: 2026-07-22 · **174 passed, 0 failed, ~92% total coverage**_
 
 | Phase | Название | Статус | Этапы | Gate |
 |-------|----------|--------|-------|------|
@@ -8,16 +8,18 @@ _Last updated: 2026-07-22 · **169 passed, 0 failed, ~92% total coverage**_
 | P1 | Runtime + Capability | ✅ | capability, executor, workspace, integration | 108 passed, 95% |
 | P2 | Knowledge Pipeline | ✅ | scanner, parser, chunker, embedder, graph + e2e | 140 passed, 90.5% |
 | P3 | MCP + SDK | ✅ | client, sdk | 113 passed, 90% |
-| P4 | MCP Server | ✅ | server, tools, **SSE transport** | 30 MCP tests green |
+| P4 | MCP Server | ✅ | server, tools, **SSE + Streamable HTTP transport** | 37 MCP tests green |
 | P5 | Multi-tenancy | ✅ | auth, rbac, persistence | 157 passed, ~91% |
 | A | SSE transport | ✅ | `mcp/server_sse.py` | 5 tests, 80% |
+| A2 | Streamable HTTP transport | ✅ | `mcp/server_streamable.py` | 7 tests, 82% |
 | B | KnowledgeRetrievalService | ✅ | `kernel/retrieval.py` | 4 tests, 96% |
 | C | Plugin SDK CLI | ✅ | `plugins/sdk/cli.py` (`hermes plugin`) | 3 tests |
 | D | ADR-007 Workspace Isolation | ✅ | `docs/adr/ADR-007-*.md` | spec |
+| ADR-008 | Streamable HTTP Transport | ✅ | `docs/adr/ADR-008-*.md` | spec |
 
 > **P5 = COMPLETE.** Auth (P5.1), RBAC (P5.2), Persistent Storage (P5.3) — see
 > [ADR-005](adr/ADR-005-multi-tenancy.md). Milestone tag: **`v0.7.0`**.
-> Post-milestone extensions A–D delivered in this session (tag **`v0.8.0`**).
+> Post-milestone extensions A–D + A2 delivered (tag **`v0.8.0`** → **`v0.9.0`**).
 
 ## P2 Knowledge Pipeline (delivered)
 
@@ -64,7 +66,7 @@ without rewriting the registries.
   already-enforced workspace isolation contract (persistence, graph, retrieval,
   scanner, RBAC).
 
-## Current test surface (169 tests)
+## Current test surface (174 tests)
 
 | Suite | Tests | Suite | Tests |
 |-------|-------|-------|-------|
@@ -80,7 +82,7 @@ without rewriting the registries.
 | test_rbac | 4 | test_persistence | 6 |
 | test_integration | 3 | test_integration_p2 | 1 |
 | test_mcp_sse | 5 | test_retrieval | 4 |
-| test_sdk_cli | 3 | | |
+| test_sdk_cli | 3 | test_mcp_streamable | 7 |
 
 ## Module coverage snapshot
 
@@ -95,14 +97,16 @@ without rewriting the registries.
 | kernel/parser.py | 84% | kernel/embedder.py | 84% |
 | kernel/rbac.py | 81% | mcp/tools.py | 97% |
 | mcp/client.py | 81% | mcp/server.py | 81% |
-| mcp/server_sse.py | 80% | plugins/loader.py | 97% |
-| plugins/sdk (pkg) | 95% | plugins/sdk/cli.py | 64% |
+| mcp/server_sse.py | 80% | mcp/server_streamable.py | 82% |
+| plugins/loader.py | 97% | plugins/sdk/cli.py | 64% |
 
 ## Next up
 
-- **MCP Streamable HTTP** transport (beyond SSE) — optional.
+- **MCP Streamable HTTP durable sessions**: `Last-Event-ID` replay + session
+  persistence via `PersistenceRegistry` (currently in-memory only).
 - **KnowledgeRetrievalService** production backend swap (faiss/sqlite-vss) behind
   the same query API, if corpus grows past in-memory scale.
-- **Plugin registry UX**: `hermes plugin list`, `validate`, `disable`.
+- **Plugin CLI UX**: `hermes plugin list`, `validate`, `disable`.
+- **CI tach axis-gate** hardening (already in `pyproject.toml`; enforce in CI).
 
 See the [ADRs](adr/) for architectural decisions behind each phase.
