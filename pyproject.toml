@@ -25,7 +25,8 @@ test = ["pytest>=8.0", "pytest-asyncio>=0.23", "pytest-cov>=5.0"]
 dev = ["ruff>=0.5", "tach>=0.9"]
 faiss = ["faiss-cpu>=1.8"]
 vss = ["sqlite-vss>=0.1"]
-all = ["faiss-cpu>=1.8", "sqlite-vss>=0.1"]
+desktop = ["pyautogui>=0.9", "Pillow>=10.0"]
+all = ["faiss-cpu>=1.8", "sqlite-vss>=0.1", "pyautogui>=0.9", "Pillow>=10.0"]
 
 [project.scripts]
 hermes = "plugins.sdk.cli:main"

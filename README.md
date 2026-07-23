@@ -3,8 +3,8 @@
 > An async-first, event-driven **AI Operating System** kernel — Clean
 > Architecture, plugin-extensible, MCP-native.
 
-**Status:** v1.0.0 · **212 passed, 3 skipped, 87% coverage** (Python 3.11+).
-All phases P0–P5 + extensions A/A2/B/C/D + ADR-007..010 + CI axis-gate delivered.
+**Status:** v1.1.0 · **222 passed, 3 skipped, 87% coverage** (Python 3.11+).
+All phases P0–P5 + extensions A/A2/B/C/D + ADR-007..011 + CI axis-gate delivered.
 
 ---
 
@@ -161,6 +161,30 @@ The `list` / `disable` commands drive the kernel's own `PluginRegistry`
 `PluginValidator` (manifest schema → `py_compile` → dependency resolution) with
 **no plugin execution**. See **ADR-010**.
 
+### D — Desktop Control builtin plugin (`plugins/builtin/desktop_control/`)
+
+Exposes host mouse / keyboard / screenshot control as kernel Tools under the
+`hermes.desktop` capability (see **ADR-011**). Optional deps are installed via
+the `desktop` extra:
+
+```bash
+pip install 'hermes-kernel-v2[desktop]'
+```
+
+| Tool | Params | Returns |
+|------|--------|---------|
+| `mouse_move` | `x: int, y: int` | `{"ok": bool}` |
+| `mouse_click` | `button: str="left", clicks: int=1` | `{"ok": bool}` |
+| `key_press` | `key: str` | `{"ok": bool}` |
+| `type_text` | `text: str, interval: float=0.01` | `{"ok": bool}` |
+| `screenshot` | `region: list[int] | None = None` | `{"image": str}` (base64 PNG) |
+
+Design: `DesktopControlPlugin(BasePlugin)`; every tool is `async` and offloads
+the blocking `pyautogui` call via `asyncio.to_thread` (event loop never blocked).
+`load()` raises `RuntimeError` on unsupported platforms or missing deps. Tools
+are registered into `ToolRegistry` via `register_tools(tr)` after `load()`
+(import-side-effect free — no global SDK state needed).
+
 ---
 
 ## Quick start
@@ -226,6 +250,9 @@ Decisions are recorded as ADRs:
   Memory / Faiss / SQLite-VSS pluggable backends behind a stable API.
 - [ADR-010 — Plugin CLI UX](docs/adr/ADR-010-plugin-cli-ux.md) —
   `list` / `validate` / `disable` driving the single `PluginRegistry`.
+- [ADR-011 — Desktop Control](docs/adr/ADR-011-desktop-control.md) —
+  builtin `DesktopControlPlugin` exposing mouse/keyboard/screenshot as
+  `hermes.desktop` Tools (lazy `pyautogui`/`Pillow`, async, platform-guarded).
 
 ---
 

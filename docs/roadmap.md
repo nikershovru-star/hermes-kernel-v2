@@ -1,6 +1,6 @@
 # Hermes Kernel v2 — Roadmap
 
-_Last updated: 2026-07-23 · **v1.0.0** · 212 passed, 3 skipped, 87% total coverage (CI gate ≥85% ✅)_
+_Last updated: 2026-07-23 · **v1.1.0** · 222 passed, 3 skipped, 87% total coverage (CI gate ≥85% ✅)_
 
 | Phase | Название | Статус | Этапы | Gate |
 |-------|----------|--------|-------|------|
@@ -18,6 +18,7 @@ _Last updated: 2026-07-23 · **v1.0.0** · 212 passed, 3 skipped, 87% total cove
 | ADR-008 | Streamable HTTP Transport | ✅ | `docs/adr/ADR-008-*.md` | spec |
 | ADR-009 | Retrieval Backends | ✅ | `kernel/retrieval_backends.py` | 17 tests, 68%* |
 | ADR-010 | Plugin CLI UX | ✅ | `plugins/sdk/validator.py` + `kernel/registry.PluginRegistry` | 13 tests, 84/87% |
+| ADR-011 | Desktop Control | ✅ | `plugins/builtin/desktop_control` | 10 tests, 88% |
 
 > \* `kernel/retrieval_backends.py` coverage is **68% on Windows** (sqlite-vss
 > has no Windows wheels → its 3 tests skip). On Linux with `faiss-cpu` +
@@ -70,6 +71,12 @@ without rewriting the registries.
   scaffolds a plugin (`.py` + `plugin.yaml`); `hermes plugin watch <dir>`
   hot-reloads changed modules via polling (no watchdog dep). Wired as a
   `[project.scripts]` console entry point. Tests in `tests/test_sdk_cli.py`.
+- **D — Desktop Control builtin plugin** (`plugins/builtin/desktop_control/`):
+  `DesktopControlPlugin(BasePlugin)` exposes mouse/keyboard/screenshot as
+  `hermes.desktop` Tools (`mouse_move`, `mouse_click`, `key_press`, `type_text`,
+  `screenshot`). Lazy `pyautogui`/`Pillow` (installed via `[desktop]` extra),
+  `asyncio.to_thread` for blocking calls, platform guard in `load()`.
+  Tests: `tests/test_desktop_control.py` (10 tests, 88% cov). See **ADR-011**.
 - **D — ADR-007** (`docs/adr/ADR-007-workspace-isolation.md`): formalises the
   already-enforced workspace isolation contract (persistence, graph, retrieval,
   scanner, RBAC).
@@ -114,9 +121,9 @@ without rewriting the registries.
 
 ## Next up
 
-- **v1.0.0 tagged** ✅ — core kernel stable: P0–P5 + A/A2/B/C/D + ADR-007..010 + CI axis-gate (tach ✅, 212 passed, 87% cov).
-- **Desktop control** (RustDesk/pyautogui) — builtin plugin, after v1.0.0.
+- **v1.1.0 tagged** ✅ — Desktop Control builtin plugin (ADR-011, 10 tests, 88% cov). Total 222 passed, 3 skipped, 87% cov.
 - **Session TTL / eviction** for long-lived file-backed MCP event logs.
 - **`Mcp-Protocol-Version`** negotiation header for Streamable HTTP.
+- **RustDesk native remote control** — future option (pyautogui covers local).
 
 See the [ADRs](adr/) for architectural decisions behind each phase.
