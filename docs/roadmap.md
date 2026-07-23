@@ -1,6 +1,6 @@
 # Hermes Kernel v2 — Roadmap
 
-_Last updated: 2026-07-23 · **212 passed, 3 skipped, ~92% total coverage**_
+_Last updated: 2026-07-23 · **v1.0.0** · 212 passed, 3 skipped, 87% total coverage (CI gate ≥85% ✅)_
 
 | Phase | Название | Статус | Этапы | Gate |
 |-------|----------|--------|-------|------|
@@ -114,7 +114,8 @@ without rewriting the registries.
 
 ## Next up
 
-- **Desktop control** (RustDesk/pyautogui) — future, after kernel v1.0.0.
+- **v1.0.0 tagged** ✅ — core kernel stable: P0–P5 + A/A2/B/C/D + ADR-007..010 + CI axis-gate (tach ✅, 212 passed, 87% cov).
+- **Desktop control** (RustDesk/pyautogui) — builtin plugin, after v1.0.0.
 - **Session TTL / eviction** for long-lived file-backed MCP event logs.
 - **`Mcp-Protocol-Version`** negotiation header for Streamable HTTP.
 

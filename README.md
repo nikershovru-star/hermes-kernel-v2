@@ -3,8 +3,8 @@
 > An async-first, event-driven **AI Operating System** kernel — Clean
 > Architecture, plugin-extensible, MCP-native.
 
-**Status:** P0–P3 delivered · **113 passed, 0 failed, 90% coverage**
-(Python 3.11+).
+**Status:** v1.0.0 · **212 passed, 3 skipped, 87% coverage** (Python 3.11+).
+All phases P0–P5 + extensions A/A2/B/C/D + ADR-007..010 + CI axis-gate delivered.
 
 ---
 
