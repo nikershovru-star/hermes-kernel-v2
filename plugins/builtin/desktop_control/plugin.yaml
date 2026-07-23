@@ -1,5 +1,7 @@
+plugin_id: desktop_control
 name: desktop_control
-version: 0.1.0
-capabilities: [hermes.desktop.mouse_move, hermes.desktop.mouse_click, hermes.desktop.key_press, hermes.desktop.type_text, hermes.desktop.screenshot]
+version: 2.3.0
+capabilities: [hermes.desktop]
 entrypoint: plugins.builtin.desktop_control:DesktopControlPlugin
-dependencies: [pyautogui, PIL]
+agent_entrypoint: plugins.builtin.desktop_control:DesktopAgent
+dependencies: [pyautogui, Pillow]

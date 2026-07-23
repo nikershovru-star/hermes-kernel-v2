@@ -16,6 +16,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from kernel.domain import Agent, Artifact, Task
+from kernel.events import DomainEvent, EventBus, EventStore
 
 logger = logging.getLogger("hermes.kernel.agent")
 
@@ -76,14 +77,27 @@ class AgentRuntime:
     ``PluginRegistry`` tracks live plugin instances.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        bus: EventBus | None = None,
+        store: EventStore | None = None,
+    ) -> None:
         self._agents: dict[str, BaseAgent] = {}
+        self._bus = bus
+        self._store = store
 
     async def start(self, agent: BaseAgent) -> str:
         """Start ``agent`` and register it as running. Return its agent_id."""
         agent_id = await agent.start()
         self._agents[agent_id] = agent
         logger.info("AgentRuntime: started %s (%s)", agent.name, agent_id)
+        await self._publish(
+            DomainEvent(
+                type="agent.started",
+                aggregate_id=agent_id,
+                payload={"agent_type": agent.__class__.__name__},
+            )
+        )
         return agent_id
 
     async def stop(self, agent_id: str) -> bool:
@@ -94,6 +108,13 @@ class AgentRuntime:
             return False
         ok = await agent.stop(agent_id)
         self._agents.pop(agent_id, None)
+        await self._publish(
+            DomainEvent(
+                type="agent.stopped",
+                aggregate_id=agent_id,
+                payload={"reason": "explicit_stop"},
+            )
+        )
         return ok
 
     async def execute(self, agent_id: str, task: Task) -> Artifact:
@@ -118,5 +139,12 @@ class AgentRuntime:
         """List agent_ids of all currently running agents."""
         return list(self._agents.keys())
 
+
+    async def _publish(self, event: DomainEvent) -> None:
+        """Append to store + publish on bus if either is configured."""
+        if self._store is not None:
+            await self._store.append(event)
+        if self._bus is not None:
+            self._bus.publish(event)
 
 __all__ = ["BaseAgent", "AgentRuntime"]

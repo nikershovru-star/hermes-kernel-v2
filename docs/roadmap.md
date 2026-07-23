@@ -1,6 +1,6 @@
 # Hermes Kernel v2 — Roadmap
 
-_Last updated: 2026-07-23 · **v2.2.1** · 260 passed, 3 skipped, 88% total coverage (CI gate ≥85% ✅)_
+_Last updated: 2026-07-23 · **v2.3.0** · 291 passed, 3 skipped, 88% total coverage (CI gate ≥85% ✅)_
 
 | Phase | Название | Статус | Этапы | Gate |
 |-------|----------|--------|-------|------|
@@ -22,6 +22,7 @@ _Last updated: 2026-07-23 · **v2.2.1** · 260 passed, 3 skipped, 88% total cove
 | ADR-012 | MCP Streamable hardening | ✅ | `mcp/server_streamable.py` | 6 tests, 86% |
 | ADR-013 | Human Emulation Layer | ✅ | `plugins/builtin/human_emulation/` | 18 tests, 86% |
 | ADR-016 | Agent/Plugin Unification | ✅ | `kernel/agent.py` + `kernel/capability.py` + `plugins/builtin/agents/` | 14 tests |
+| ADR-017 | Event Platform + Desktop Agent Vision | ✅ | `kernel/events.py` + `plugins/builtin/desktop_control/` | 31 tests, 88% |
 
 > \* `kernel/retrieval_backends.py` coverage is **68% on Windows** (sqlite-vss
 > has no Windows wheels → its 3 tests skip). On Linux with `faiss-cpu` +
@@ -124,7 +125,7 @@ without rewriting the registries.
 
 ## Next up
 
-- **v2.2.1 tagged** ✅ — Agent/Plugin Unification (ADR-016): `BaseAgent` async lifecycle + `AgentRuntime` (live instances; `AgentRegistry` keeps declarative metadata), unified `Artifact` (`format`/`provenance`/`content: Any`), `CapabilityExecutor` (namespaced dispatch → `Artifact`, handlers injected to keep kernel→plugins axis). `EchoAgent` reference impl. 14 new tests. Total 260 passed, 3 skipped, 88% cov.
+- **v2.3.0 tagged** ✅ — Event Platform + Desktop Agent Vision (ADR-017): `kernel/events.py` (DomainEvent extends Event + EventStore append-only + CQRS Command/Query Bus), `DesktopAgent(BaseAgent)` event-driven (routes via CommandBus, emits DomainEvents, dogfoods CapabilityExecutor), `DesktopVision` (OCR + element detection, lazy deps), `CapabilityExecutor.register_agent`. 31 new tests. Total 291 passed, 3 skipped, 88% cov. Next: ADR-018 handler auto-discovery.
 - **Next cycles (future):** CV module (OCR + element detection), Behavior engine (scroll/reading patterns), RustDesk native remote, Knowledge-graph web UI, Plugin marketplace, Multi-node distributed kernel.
 - **RustDesk native remote control** — future option (pyautogui covers local).
 - **Knowledge graph visualization (web UI)** — future.

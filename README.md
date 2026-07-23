@@ -3,8 +3,8 @@
 > An async-first, event-driven **AI Operating System** kernel — Clean
 > Architecture, plugin-extensible, MCP-native.
 
-**Status:** v2.2.1 · **260 passed, 3 skipped, 88% coverage** (Python 3.11+).
-All phases P0–P5 + extensions A/A2/B/C/D/E/F + ADR-007..016 + CI axis-gate delivered.
+**Status:** v2.3.0 · **291 passed, 3 skipped, 88% coverage** (Python 3.11+).
+All phases P0–P5 + extensions A/A2/B/C/D/E/F + ADR-007..017 + CI axis-gate delivered.
 
 ---
 
@@ -295,6 +295,10 @@ Decisions are recorded as ADRs:
   `BaseAgent` async lifecycle + `AgentRuntime`, unified `Artifact`
   (`format`/`provenance`/`content: Any`), `CapabilityExecutor` (namespaced
   dispatch → `Artifact`).
+- [ADR-017 — Event Platform + Desktop Agent Vision](docs/adr/ADR-017-event-platform-cqrs.md) —
+  `kernel/events.py` (DomainEvent extends Event + EventStore append-only + CQRS
+  Command/Query Bus), `DesktopAgent(BaseAgent)` event-driven, `DesktopVision`
+  (OCR + element detection), `CapabilityExecutor.register_agent`.
 
 ---
 

@@ -11,7 +11,8 @@ import asyncio
 import logging
 from typing import Optional
 
-from kernel.domain import Artifact, Capability, Tool
+from kernel.agent import BaseAgent
+from kernel.domain import Artifact, Capability, Task, Tool
 from kernel.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
@@ -130,6 +131,27 @@ class CapabilityExecutor:
     def register_handler(self, capability: str, handler: Any) -> None:
         """Register (or override) the handler for a namespaced capability."""
         self._handlers[capability] = handler
+
+    def register_agent(self, agent: "BaseAgent") -> None:
+        """Wire a BaseAgent's capabilities into the executor (dogfood).
+
+        Each capability becomes a handler that builds a ``Task`` from the call
+        params/context and delegates to ``agent.execute(agent_id, task)``,
+        returning the resulting ``Artifact``. This is the manual wiring step of
+        ADR-017 (auto-discovery is deferred to ADR-018).
+        """
+        for cap in agent.capabilities:
+            self._handlers[cap] = self._make_agent_handler(agent, cap)
+
+    @staticmethod
+    def _make_agent_handler(agent: "BaseAgent", capability: str) -> Any:
+        async def handler(params: dict[str, Any], context: dict[str, Any] | None) -> Artifact:
+            meta = dict(params or {})
+            if context:
+                meta.update({k: v for k, v in context.items() if k not in meta})
+            task = Task(name=capability, capability=capability, metadata=meta)
+            return await agent.execute(agent.agent_id, task)
+        return handler
 
     async def execute(
         self,
