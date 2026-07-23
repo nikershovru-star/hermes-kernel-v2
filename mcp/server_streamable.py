@@ -30,6 +30,7 @@ import queue
 import threading
 import time
 import uuid
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
@@ -44,6 +45,9 @@ logger = logging.getLogger("hermes.mcp.streamable")
 
 SESSION_HEADER = "Mcp-Session-Id"
 EVENT_ID_HEADER = "Last-Event-ID"
+PROTOCOL_VERSION_HEADER = "Mcp-Protocol-Version"
+DEFAULT_PROTOCOL_VERSION = "2024-11-05"
+HTTP_426_UPGRADE_REQUIRED = 426
 
 
 class StreamableHTTPSession:
@@ -137,6 +141,9 @@ class MCPServerStreamable:
         tool_registry: ToolRegistry,
         event_bus: EventBus,
         persistence: PersistenceRegistry | None = None,
+        session_ttl: int = 86400,
+        evict_interval: int = 3600,
+        protocol_version: str = DEFAULT_PROTOCOL_VERSION,
     ) -> None:
         self._server = MCPServer(tool_registry, event_bus)
         self._sessions: dict[str, StreamableHTTPSession] = {}
@@ -146,6 +153,12 @@ class MCPServerStreamable:
         self._host = "127.0.0.1"
         self._port = 0
         self._persistence = persistence
+        # durability: drop McpSessionEvent older than session_ttl seconds
+        self._session_ttl = session_ttl
+        self._evict_interval = evict_interval
+        self._evict_task: asyncio.Task | None = None
+        # MCP protocol version negotiation
+        self._protocol_version = protocol_version
 
     # -- delegate protocol config to the underlying server ---------------- #
     def set_handler(self, tool_name: str, handler) -> None:
@@ -174,6 +187,90 @@ class MCPServerStreamable:
         if s is not None:
             s.close()
 
+    # -- durability: TTL / eviction of persisted SSE frames -------------- #
+    async def _evict_expired(self) -> None:
+        """Delete persisted McpSessionEvent records older than ``session_ttl``.
+
+        Scans every known session workspace (``mcp:<session_id>``) and removes
+        events whose ``created_at`` is older than the TTL. Best-effort: a DB
+        error is logged, never raised (the live stream must not be affected).
+        """
+        if self._persistence is None or self._session_ttl <= 0:
+            return
+        now = time.time()
+        cutoff = now - self._session_ttl
+        with self._lock:
+            session_ids = list(self._sessions.keys())
+        for sid in session_ids:
+            try:
+                rows = await self._persistence.list(
+                    workspace_id=f"mcp:{sid}", entity_type="McpSessionEvent"
+                )
+            except Exception:  # never break eviction on DB hiccup
+                logger.exception("evict: list failed for session %s", sid)
+                continue
+            for ev in rows:
+                if not isinstance(ev, McpSessionEvent):
+                    continue
+                # created_at is ISO-8601 (UTC, e.g. 2024-01-01T12:00:00.123456+00:00)
+                try:
+                    created = datetime.fromisoformat(ev.created_at)
+                    if created.tzinfo is None:
+                        created = created.replace(tzinfo=timezone.utc)
+                except (ValueError, TypeError):
+                    continue
+                cutoff_dt = datetime.fromtimestamp(cutoff, tz=timezone.utc)
+                if created < cutoff_dt:
+                    try:
+                        await self._persistence.delete(ev.id)
+                    except Exception:  # noqa: BLE001
+                        logger.exception("evict: delete failed for %s", ev.id)
+
+    def _schedule_eviction(self) -> None:
+        """Schedule the periodic eviction loop on the server event loop."""
+        if self._persistence is None or self._session_ttl <= 0:
+            return
+        if self._loop is None:
+            return
+
+        async def _loop_evict() -> None:
+            try:
+                while True:
+                    await asyncio.sleep(self._evict_interval)
+                    await self._evict_expired()
+            except asyncio.CancelledError:
+                return
+
+        self._evict_task = self._loop.create_task(_loop_evict())
+
+    # -- protocol version negotiation ------------------------------------ #
+    def _check_protocol_version(self, handler: "BaseHTTPRequestHandler") -> bool:
+        """Validate the client's ``Mcp-Protocol-Version`` header.
+
+        Returns True if the version is acceptable (missing = legacy client,
+        accepted). Returns False (and writes a 426 response) if the client
+        sent an incompatible version.
+        """
+        client_ver = handler.headers.get(PROTOCOL_VERSION_HEADER)
+        if client_ver is None:
+            return True  # legacy client, no negotiation
+        if client_ver == self._protocol_version:
+            return True
+        # incompatible: 426 Upgrade Required, advertise supported version
+        handler.send_response(HTTP_426_UPGRADE_REQUIRED)
+        handler.send_header(PROTOCOL_VERSION_HEADER, self._protocol_version)
+        handler.send_header("Content-Type", "application/json")
+        handler.end_headers()
+        handler.wfile.write(
+            json.dumps(
+                {
+                    "error": "unsupported protocol version",
+                    "supported": self._protocol_version,
+                }
+            ).encode("utf-8")
+        )
+        return False
+
     # -- core dispatch (testable without a socket) ----------------------- #
     def dispatch(self, msg: dict) -> dict | None:
         """Run one JSON-RPC message on the server loop; return its response.
@@ -193,6 +290,9 @@ class MCPServerStreamable:
 
     # -- HTTP: POST /mcp/v1/messages ------------------------------------- #
     def _handle_post_messages(self, handler: "BaseHTTPRequestHandler") -> None:
+        # protocol version negotiation: reject incompatible clients (426)
+        if not self._check_protocol_version(handler):
+            return
         length = int(handler.headers.get("Content-Length", 0))
         raw = handler.rfile.read(length) if length else b"{}"
         session = self._session(handler.headers.get(SESSION_HEADER))
@@ -224,6 +324,9 @@ class MCPServerStreamable:
 
     # -- HTTP: GET /mcp/v1/events ---------------------------------------- #
     def _handle_get_events(self, handler: "BaseHTTPRequestHandler") -> None:
+        # protocol version negotiation (GET stream also requires a match)
+        if not self._check_protocol_version(handler):
+            return
         session = self._session(handler.headers.get(SESSION_HEADER))
         if session is None:
             handler.send_response(404)
@@ -242,6 +345,7 @@ class MCPServerStreamable:
         handler.send_header("Content-Type", "text/event-stream")
         handler.send_header("Cache-Control", "no-cache")
         handler.send_header("Connection", "keep-alive")
+        handler.send_header(PROTOCOL_VERSION_HEADER, self._protocol_version)
         handler.end_headers()
         # SSE keep-alive comment: confirms the stream is open (clients ignore it)
         handler.wfile.write(b": connected\n\n")
@@ -290,6 +394,7 @@ class MCPServerStreamable:
         handler.send_response(code)
         handler.send_header("Content-Type", content_type)
         handler.send_header(SESSION_HEADER, session.session_id)
+        handler.send_header(PROTOCOL_VERSION_HEADER, self._protocol_version)
         handler.send_header("Access-Control-Allow-Origin", "*")
         handler.end_headers()
         handler.wfile.write(body)
@@ -346,6 +451,8 @@ class MCPServerStreamable:
         self._host, self._port = self._http.server_address[:2]
         t = threading.Thread(target=self._http.serve_forever, daemon=True)
         t.start()
+        # durability: start background TTL eviction of persisted SSE frames
+        self._schedule_eviction()
         logger.info("MCP Streamable HTTP on http://%s:%s%s", self._host, self._port, base)
 
     @property
@@ -353,6 +460,10 @@ class MCPServerStreamable:
         return (self._host, self._port)
 
     def stop(self) -> None:
+        # cancel the eviction background task (best-effort)
+        if self._evict_task is not None:
+            self._evict_task.cancel()
+            self._evict_task = None
         if self._loop is not None:
             self._loop.call_soon_threadsafe(self._loop.stop)
             self._loop_thread.join(timeout=2)

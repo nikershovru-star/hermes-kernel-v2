@@ -9,11 +9,14 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import asyncio
 from pathlib import Path
 
 import pytest
+from unittest.mock import patch
 
 from kernel import bus, domain, registry
+from kernel.domain import McpSessionEvent
 from kernel.persistence import PersistenceRegistry
 from mcp.server_streamable import MCPServerStreamable, SESSION_HEADER
 
@@ -312,3 +315,188 @@ def test_durable_session_survives_server_restart(tmp_path: Path) -> None:
     assert "persist-me" in rows[0].sse_data
     s2.stop()
     asyncio.run(p2.close())
+
+
+# --------------------------------------------------------------------------- #
+# MCP Streamable HTTP hardening: TTL eviction + protocol version (v1.2.0)
+# --------------------------------------------------------------------------- #
+def test_evict_expired_removes_old_events(tmp_path: Path) -> None:
+    """_evict_expired() deletes McpSessionEvent older than session_ttl."""
+    db = str(tmp_path / "mcp.db")
+    sid = "sess-evict-1"
+    tb = bus.EventBus()
+    tr = registry.ToolRegistry()
+    p = PersistenceRegistry(db_path=db)
+    srv = MCPServerStreamable(tr, tb, persistence=p, session_ttl=10, evict_interval=9999)
+    srv.start(port=0)
+    # register a session under a deterministic id so eviction scans its
+    # persistence workspace (mcp:<sid>).
+    sess = srv._create_session()
+    with srv._lock:
+        srv._sessions.pop(sess.session_id, None)
+        sess.session_id = sid
+        srv._sessions[sid] = sess
+    sess.set_loop(srv._loop)
+    # two events created "now"; we advance the clock by 100s so both fall
+    # outside the 10s TTL and get evicted.
+    for seq in (1, 2):
+        asyncio.run(
+            p.save(
+                McpSessionEvent(
+                    session_id=sid, seq=seq,
+                    sse_data=f"id: {seq}\ndata: x\n", workspace_id=f"mcp:{sid}",
+                )
+            )
+        )
+    real_now = time.time()
+    with patch.object(time, "time", return_value=real_now + 100):
+        asyncio.run(srv._evict_expired())
+    rows = asyncio.run(p.list(workspace_id=f"mcp:{sid}", entity_type="McpSessionEvent"))
+    srv.stop()
+    asyncio.run(p.close())
+    assert len(rows) == 0  # both evicted (older than TTL once clock advanced)
+
+
+def test_evict_expired_disabled_when_ttl_zero(tmp_path: Path) -> None:
+    """With session_ttl=0 eviction is a no-op (events retained)."""
+    db = str(tmp_path / "mcp.db")
+    sid = "sess-evict-2"
+    tb = bus.EventBus()
+    tr = registry.ToolRegistry()
+    p = PersistenceRegistry(db_path=db)
+    srv = MCPServerStreamable(tr, tb, persistence=p, session_ttl=0)
+    srv.start(port=0)
+    sess = srv._create_session()
+    sess.session_id = sid
+    sess.set_loop(srv._loop)
+    asyncio.run(
+        p.save(
+            McpSessionEvent(
+                session_id=sid, seq=1, sse_data="id: 1\ndata: x\n",
+                workspace_id=f"mcp:{sid}",
+            )
+        )
+    )
+    asyncio.run(srv._evict_expired())
+    rows = asyncio.run(p.list(workspace_id=f"mcp:{sid}", entity_type="McpSessionEvent"))
+    srv.stop()
+    asyncio.run(p.close())
+    assert len(rows) == 1
+
+
+def test_protocol_version_negotiation_ok(tmp_path: Path) -> None:
+    """Client sending a matching Mcp-Protocol-Version gets it echoed."""
+    tb = bus.EventBus()
+    tr = registry.ToolRegistry()
+    srv = MCPServerStreamable(tr, tb, protocol_version="2024-11-05")
+    srv.set_handler("echo", lambda a: f"got:{a.get('v')}")
+    srv.start(port=0)
+    fut = asyncio.run_coroutine_threadsafe(
+        tr.register(
+            domain.Tool(
+                name="echo", capability="hermes.echo",
+                input_schema={"type": "object", "properties": {"v": {"type": "string"}}},
+            )
+        ),
+        srv._loop,
+    )
+    fut.result(timeout=5)
+    host, port = srv.address
+    body = json.dumps(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+         "params": {"name": "echo", "arguments": {"v": "pv"}}}
+    ).encode()
+    req = urllib.request.Request(
+        f"http://{host}:{port}/mcp/v1/messages",
+        data=body, method="POST",
+        headers={"Content-Type": "application/json",
+                 "Mcp-Protocol-Version": "2024-11-05"},
+    )
+    with urllib.request.urlopen(req, timeout=5) as r:  # noqa: S310
+        assert r.headers.get("Mcp-Protocol-Version") == "2024-11-05"
+        data = json.loads(r.read().decode("utf-8"))
+        assert data["result"]["content"][0]["text"] == "got:pv"
+    srv.stop()
+
+
+def test_protocol_version_mismatch_returns_426(tmp_path: Path) -> None:
+    """An incompatible Mcp-Protocol-Version yields 426 Upgrade Required."""
+    tb = bus.EventBus()
+    tr = registry.ToolRegistry()
+    srv = MCPServerStreamable(tr, tb, protocol_version="2024-11-05")
+    srv.set_handler("echo", lambda a: f"got:{a.get('v')}")
+    srv.start(port=0)
+    fut = asyncio.run_coroutine_threadsafe(
+        tr.register(
+            domain.Tool(
+                name="echo", capability="hermes.echo",
+                input_schema={"type": "object", "properties": {"v": {"type": "string"}}},
+            )
+        ),
+        srv._loop,
+    )
+    fut.result(timeout=5)
+    host, port = srv.address
+    body = json.dumps(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+         "params": {"name": "echo", "arguments": {"v": "x"}}}
+    ).encode()
+    req = urllib.request.Request(
+        f"http://{host}:{port}/mcp/v1/messages",
+        data=body, method="POST",
+        headers={"Content-Type": "application/json",
+                 "Mcp-Protocol-Version": "1999-01-01"},
+    )
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        urllib.request.urlopen(req, timeout=5)  # noqa: S310
+    assert excinfo.value.code == 426
+    srv.stop()
+
+
+def test_protocol_version_absent_legacy_client_ok(tmp_path: Path) -> None:
+    """A client with no Mcp-Protocol-Version header is accepted (legacy)."""
+    tb = bus.EventBus()
+    tr = registry.ToolRegistry()
+    srv = MCPServerStreamable(tr, tb, protocol_version="2024-11-05")
+    srv.set_handler("echo", lambda a: f"got:{a.get('v')}")
+    srv.start(port=0)
+    fut = asyncio.run_coroutine_threadsafe(
+        tr.register(
+            domain.Tool(
+                name="echo", capability="hermes.echo",
+                input_schema={"type": "object", "properties": {"v": {"type": "string"}}},
+            )
+        ),
+        srv._loop,
+    )
+    fut.result(timeout=5)
+    host, port = srv.address
+    body = json.dumps(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+         "params": {"name": "echo", "arguments": {"v": "legacy"}}}
+    ).encode()
+    req = urllib.request.Request(
+        f"http://{host}:{port}/mcp/v1/messages",
+        data=body, method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=5) as r:  # noqa: S310
+        data = json.loads(r.read().decode("utf-8"))
+        assert data["result"]["content"][0]["text"] == "got:legacy"
+        # server still advertises its version on every response
+        assert r.headers.get("Mcp-Protocol-Version") == "2024-11-05"
+    srv.stop()
+
+
+def test_eviction_runs_in_background(tmp_path: Path) -> None:
+    """start() schedules the eviction task when persistence + TTL are set."""
+    db = str(tmp_path / "mcp.db")
+    tb = bus.EventBus()
+    tr = registry.ToolRegistry()
+    p = PersistenceRegistry(db_path=db)
+    srv = MCPServerStreamable(tr, tb, persistence=p, session_ttl=10, evict_interval=9999)
+    srv.start(port=0)
+    assert srv._evict_task is not None
+    assert not srv._evict_task.done()
+    srv.stop()
+    asyncio.run(p.close())

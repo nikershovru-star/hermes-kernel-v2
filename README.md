@@ -3,8 +3,8 @@
 > An async-first, event-driven **AI Operating System** kernel — Clean
 > Architecture, plugin-extensible, MCP-native.
 
-**Status:** v1.1.0 · **222 passed, 3 skipped, 87% coverage** (Python 3.11+).
-All phases P0–P5 + extensions A/A2/B/C/D + ADR-007..011 + CI axis-gate delivered.
+**Status:** v1.2.0 · **228 passed, 3 skipped, 87% coverage** (Python 3.11+).
+All phases P0–P5 + extensions A/A2/B/C/D/E + ADR-007..012 + CI axis-gate delivered.
 
 ---
 
@@ -185,6 +185,21 @@ the blocking `pyautogui` call via `asyncio.to_thread` (event loop never blocked)
 are registered into `ToolRegistry` via `register_tools(tr)` after `load()`
 (import-side-effect free — no global SDK state needed).
 
+### E — MCP Streamable HTTP hardening (`mcp/server_streamable.py`)
+
+Two durability / interoperability hardenings on top of ADR-008 (see **ADR-012**):
+
+- **Session TTL / eviction.** `MCPServerStreamable(..., session_ttl=86400,
+  evict_interval=3600)` starts a background task that deletes persisted
+  `McpSessionEvent` rows older than `session_ttl` from each `mcp:<session_id>`
+  workspace (file-backed logs no longer grow unbounded). `session_ttl=0`
+  disables eviction.
+- **`Mcp-Protocol-Version` negotiation.** Both `POST /mcp/v1/messages` and
+  `GET /mcp/v1/events` read the client's `Mcp-Protocol-Version` header. A match
+  (or its absence — legacy client) is accepted and the server echoes its version
+  on every response; a mismatch yields `426 Upgrade Required` advertising the
+  supported version. Default server version: `2024-11-05`.
+
 ---
 
 ## Quick start
@@ -253,6 +268,9 @@ Decisions are recorded as ADRs:
 - [ADR-011 — Desktop Control](docs/adr/ADR-011-desktop-control.md) —
   builtin `DesktopControlPlugin` exposing mouse/keyboard/screenshot as
   `hermes.desktop` Tools (lazy `pyautogui`/`Pillow`, async, platform-guarded).
+- [ADR-012 — MCP Streamable HTTP hardening](docs/adr/ADR-012-mcp-streamable-hardening.md) —
+  `McpSessionEvent` TTL eviction (background task) + `Mcp-Protocol-Version`
+  negotiation (426 on mismatch).
 
 ---
 

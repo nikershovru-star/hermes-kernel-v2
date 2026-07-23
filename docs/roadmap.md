@@ -1,6 +1,6 @@
 # Hermes Kernel v2 — Roadmap
 
-_Last updated: 2026-07-23 · **v1.1.0** · 222 passed, 3 skipped, 87% total coverage (CI gate ≥85% ✅)_
+_Last updated: 2026-07-23 · **v1.2.0** · 228 passed, 3 skipped, 87% total coverage (CI gate ≥85% ✅)_
 
 | Phase | Название | Статус | Этапы | Gate |
 |-------|----------|--------|-------|------|
@@ -19,6 +19,7 @@ _Last updated: 2026-07-23 · **v1.1.0** · 222 passed, 3 skipped, 87% total cove
 | ADR-009 | Retrieval Backends | ✅ | `kernel/retrieval_backends.py` | 17 tests, 68%* |
 | ADR-010 | Plugin CLI UX | ✅ | `plugins/sdk/validator.py` + `kernel/registry.PluginRegistry` | 13 tests, 84/87% |
 | ADR-011 | Desktop Control | ✅ | `plugins/builtin/desktop_control` | 10 tests, 88% |
+| ADR-012 | MCP Streamable hardening | ✅ | `mcp/server_streamable.py` | 6 tests, 86% |
 
 > \* `kernel/retrieval_backends.py` coverage is **68% on Windows** (sqlite-vss
 > has no Windows wheels → its 3 tests skip). On Linux with `faiss-cpu` +
@@ -121,9 +122,7 @@ without rewriting the registries.
 
 ## Next up
 
-- **v1.1.0 tagged** ✅ — Desktop Control builtin plugin (ADR-011, 10 tests, 88% cov). Total 222 passed, 3 skipped, 87% cov.
-- **Session TTL / eviction** for long-lived file-backed MCP event logs.
-- **`Mcp-Protocol-Version`** negotiation header for Streamable HTTP.
+- **v1.2.0 tagged** ✅ — MCP Streamable HTTP hardening (ADR-012): Session TTL eviction + `Mcp-Protocol-Version` negotiation (426 on mismatch). 6 new tests; `server_streamable.py` 86% cov. Total 228 passed, 3 skipped, 87% cov.
 - **RustDesk native remote control** — future option (pyautogui covers local).
 
 See the [ADRs](adr/) for architectural decisions behind each phase.
