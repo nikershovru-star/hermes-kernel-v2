@@ -11,18 +11,14 @@ Endpoints:
     POST /mcp/v1/messages   client -> server (JSON-RPC, application/json)
     GET  /mcp/v1/events     server -> client (text/event-stream; notifications)
 
-Sessions: identified by the ``Mcp-Session-Id`` HTTP header (not a query param).
-A POST without a session id creates a new session and returns its id in the
-response header. JSON-RPC batches (``requests: [...]``) are split, handled
-individually, and aggregated into a response array.
+Resumability (``Last-Event-ID`` replay) is implemented: server→client SSE
+events are persisted to a ``PersistenceRegistry`` (workspace ``mcp:<session_id>``)
+and replayed on reconnect via ``GET /mcp/v1/events`` with a ``Last-Event-ID``
+header. With a file-backed persistence store this survives a server restart.
 
-Resumability (``Last-Event-ID`` replay) is a future concern — the header is
-parsed and accepted, but backlog replay is not yet implemented (in-memory
-session store only).
-
-AXIS CONTRACT: depends on kernel (domain, registry, bus) + the existing
-``mcp.server.MCPServer`` (owns the protocol). Stdlib ``http.server`` only —
-no FastAPI/uvicorn, keeping the dependency surface minimal.
+AXIS CONTRACT: depends on kernel (domain, registry, bus, persistence) + the
+existing ``mcp.server.MCPServer`` (owns the protocol). Stdlib ``http.server``
+only — no FastAPI/uvicorn, keeping the dependency surface minimal.
 """
 
 from __future__ import annotations
@@ -38,7 +34,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 from kernel.bus import EventBus
-from kernel.domain import Tool
+from kernel.domain import McpSessionEvent, Tool
+from kernel.persistence import PersistenceRegistry
 from kernel.registry import ToolRegistry
 
 from mcp.server import MCPServer
@@ -46,20 +43,71 @@ from mcp.server import MCPServer
 logger = logging.getLogger("hermes.mcp.streamable")
 
 SESSION_HEADER = "Mcp-Session-Id"
+EVENT_ID_HEADER = "Last-Event-ID"
 
 
 class StreamableHTTPSession:
-    """One client session; holds the server->client SSE event queue."""
+    """One client session; holds the server->client SSE event queue.
 
-    def __init__(self, session_id: str) -> None:
+    When a ``PersistenceRegistry`` is supplied, every pushed event is also
+    persisted (workspace ``mcp:<session_id>``) so a reconnecting client can
+    replay the backlog via ``Last-Event-ID`` (ADR-008 resumability).
+    """
+
+    def __init__(
+        self,
+        session_id: str,
+        persistence: PersistenceRegistry | None = None,
+    ) -> None:
         self.session_id = session_id
         # server-initiated events (notifications) for the GET /events stream
         self.events: "queue.Queue[str | None]" = queue.Queue()
         self.created_at = time.time()
+        self._seq = 0
+        self._seq_lock = threading.Lock()
+        self._persistence = persistence
+        self._loop: asyncio.AbstractEventLoop | None = None
 
-    def push_event(self, data: str) -> None:
-        """Queue a server->client SSE event (e.g. tools/list_changed)."""
-        self.events.put(data)
+    def set_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        """Bind the server event loop (used for async persistence)."""
+        self._loop = loop
+
+    def _next_seq(self) -> int:
+        with self._seq_lock:
+            self._seq += 1
+            return self._seq
+
+    def push_event(self, data: str) -> int:
+        """Queue a server->client SSE event; persist it; return its seq id.
+
+        ``data`` is the raw SSE frame body (already rendered). The persisted
+        record uses ``seq`` as the SSE ``id`` so the client can resume from it.
+        """
+        seq = self._next_seq()
+        # render a complete SSE frame: id + body + blank line terminator
+        if data.startswith("id:"):
+            frame = data if data.endswith("\n\n") else data + "\n"
+        else:
+            frame = f"id: {seq}\n{data}"
+            if not frame.endswith("\n\n"):
+                frame += "\n" if frame.endswith("\n") else "\n\n"
+        self.events.put(frame)
+        if self._persistence is not None and self._loop is not None:
+            ev = McpSessionEvent(
+                session_id=self.session_id,
+                seq=seq,
+                sse_data=frame,
+                workspace_id=f"mcp:{self.session_id}",
+            )
+            # persistence is async; schedule on the server loop
+            fut = asyncio.run_coroutine_threadsafe(
+                self._persistence.save(ev), self._loop
+            )
+            try:
+                fut.result(timeout=5)
+            except Exception:  # never block the SSE path on DB errors
+                logger.exception("push_event: persist failed")
+        return seq
 
     def get_event(self, timeout: float | None = None) -> str | None:
         return self.events.get(timeout=timeout)
@@ -67,11 +115,29 @@ class StreamableHTTPSession:
     def close(self) -> None:
         self.events.put(None)  # sentinel: stream ends
 
+    async def replay_since(self, last_seq: int) -> list[str]:
+        """Return persisted SSE frames with ``seq > last_seq`` (durable replay)."""
+        if self._persistence is None:
+            return []
+        rows = await self._persistence.list(
+            workspace_id=f"mcp:{self.session_id}", entity_type="McpSessionEvent"
+        )
+        frames = [
+            r.sse_data for r in rows if isinstance(r, McpSessionEvent) and r.seq > last_seq
+        ]
+        return sorted(frames, key=lambda f: int(f.split(":", 1)[1].split("\n", 1)[0]))
+
+
 
 class MCPServerStreamable:
     """Streamable HTTP transport wrapper around ``MCPServer``."""
 
-    def __init__(self, tool_registry: ToolRegistry, event_bus: EventBus) -> None:
+    def __init__(
+        self,
+        tool_registry: ToolRegistry,
+        event_bus: EventBus,
+        persistence: PersistenceRegistry | None = None,
+    ) -> None:
         self._server = MCPServer(tool_registry, event_bus)
         self._sessions: dict[str, StreamableHTTPSession] = {}
         self._lock = threading.Lock()
@@ -79,6 +145,7 @@ class MCPServerStreamable:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._host = "127.0.0.1"
         self._port = 0
+        self._persistence = persistence
 
     # -- delegate protocol config to the underlying server ---------------- #
     def set_handler(self, tool_name: str, handler) -> None:
@@ -88,7 +155,9 @@ class MCPServerStreamable:
     # -- session registry ------------------------------------------------ #
     def _create_session(self) -> StreamableHTTPSession:
         sid = uuid.uuid4().hex
-        s = StreamableHTTPSession(sid)
+        s = StreamableHTTPSession(sid, persistence=self._persistence)
+        if self._loop is not None:
+            s.set_loop(self._loop)
         with self._lock:
             self._sessions[sid] = s
         return s
@@ -162,9 +231,12 @@ class MCPServerStreamable:
             handler.end_headers()
             handler.wfile.write(b'{"error": "unknown or missing session"}')
             return
-        # Last-Event-ID is parsed for future resumability; backlog replay is a
-        # future concern, so we simply open a fresh stream from now on.
-        _last_event_id = handler.headers.get("Last-Event-ID")
+        # Resumability (ADR-008): if the client reconnects with Last-Event-ID,
+        # replay every persisted SSE frame with seq > that id BEFORE streaming
+        # fresh events. This survives disconnects and (with a file-backed
+        # PersistenceRegistry) even a server restart.
+        last_id = handler.headers.get("Last-Event-ID")
+        last_seq = int(last_id) if last_id and last_id.isdigit() else 0
 
         handler.send_response(200)
         handler.send_header("Content-Type", "text/event-stream")
@@ -174,6 +246,21 @@ class MCPServerStreamable:
         # SSE keep-alive comment: confirms the stream is open (clients ignore it)
         handler.wfile.write(b": connected\n\n")
         handler.wfile.flush()
+
+        # --- durable replay ------------------------------------------------ #
+        if last_seq > 0 and self._persistence is not None and self._loop is not None:
+            fut = asyncio.run_coroutine_threadsafe(
+                session.replay_since(last_seq), self._loop
+            )
+            try:
+                backlog = fut.result(timeout=5)
+                for frame in backlog:
+                    handler.wfile.write(frame.encode("utf-8"))
+                    handler.wfile.flush()
+            except Exception:  # replay is best-effort; never block the stream
+                logger.exception("GET /events replay failed")
+
+        # --- live stream --------------------------------------------------- #
         try:
             while True:
                 item = session.get_event(timeout=30)

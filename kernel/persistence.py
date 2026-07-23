@@ -39,6 +39,7 @@ from kernel.domain import (
     Chunk,
     Document,
     KnowledgeNode,
+    McpSessionEvent,
     Relation,
     Workspace,
     ENTITY_TYPES,
@@ -53,6 +54,7 @@ _TYPE_TO_CLASS: dict[str, Type[BaseEntity]] = {
     "KnowledgeNode": KnowledgeNode,
     "Relation": Relation,
     "Workspace": Workspace,
+    "McpSessionEvent": McpSessionEvent,
 }
 
 

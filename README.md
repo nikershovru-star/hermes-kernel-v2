@@ -107,8 +107,16 @@ body** (HTTP 200); `GET /mcp/v1/events` is a server→client SSE stream for
 notifications. Sessions use the `Mcp-Session-Id` header (not a query param),
 and JSON-RPC batches (`requests: [...]`) are aggregated. Pure stdlib.
 
+**Durable sessions (resumable):** pass a `PersistenceRegistry` to the
+constructor. Every server→client SSE frame is persisted (per-session workspace
+`mcp:<session_id>`) and replayed on reconnect when the client sends a
+`Last-Event-ID` header — surviving disconnects and (with a file-backed store) a
+full server restart.
+
 ```python
-srv = MCPServerStreamable(tool_registry, event_bus)
+from kernel.persistence import PersistenceRegistry
+srv = MCPServerStreamable(tool_registry, event_bus,
+                          persistence=PersistenceRegistry(db_path="mcp.db"))
 srv.set_handler("echo", lambda a: f"got:{a.get('v')}")
 srv.start(host="127.0.0.1", port=8080)   # POST /mcp/v1/messages  +  GET /mcp/v1/events
 ```

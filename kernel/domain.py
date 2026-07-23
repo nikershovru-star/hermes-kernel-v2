@@ -115,6 +115,20 @@ class Event(BaseEntity):
     # timestamp наследуется от BaseEntity.created_at (single source of time)
 
 
+class McpSessionEvent(BaseEntity):
+    """One server→client SSE event logged for a Streamable HTTP session.
+
+    Stored in ``PersistenceRegistry`` (workspace_id = ``mcp:<session_id>``) so a
+    disconnected client can replay the backlog via ``Last-Event-ID`` (ADR-008
+    resumability). ``seq`` is a per-session monotonic counter used as the
+    SSE ``id`` and the replay boundary.
+    """
+
+    session_id: str
+    seq: int
+    sse_data: str  # fully-rendered SSE frame (already includes id:/data:)
+
+
 class Memory(BaseEntity):
     type: str  # working|session|project|semantic|longterm (ADR-006)
     content: Any

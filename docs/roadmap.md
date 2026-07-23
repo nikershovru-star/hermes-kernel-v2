@@ -1,6 +1,6 @@
 # Hermes Kernel v2 — Roadmap
 
-_Last updated: 2026-07-23 · **209 passed, 3 skipped, ~92% total coverage**_
+_Last updated: 2026-07-23 · **212 passed, 3 skipped, ~92% total coverage**_
 
 | Phase | Название | Статус | Этапы | Gate |
 |-------|----------|--------|-------|------|
@@ -11,7 +11,7 @@ _Last updated: 2026-07-23 · **209 passed, 3 skipped, ~92% total coverage**_
 | P4 | MCP Server | ✅ | server, tools, **SSE + Streamable HTTP transport** | 37 MCP tests green |
 | P5 | Multi-tenancy | ✅ | auth, rbac, persistence | 157 passed, ~91% |
 | A | SSE transport | ✅ | `mcp/server_sse.py` | 5 tests, 80% |
-| A2 | Streamable HTTP transport | ✅ | `mcp/server_streamable.py` | 7 tests, 82% |
+| A2 | Streamable HTTP transport (durable sessions) | ✅ | `mcp/server_streamable.py` | 10 tests, 88% |
 | B | KnowledgeRetrievalService | ✅ | `kernel/retrieval.py` | 4 tests, 96% |
 | C | Plugin SDK CLI | ✅ | `plugins/sdk/cli.py` (`hermes plugin` init/watch/**list/validate/disable**) | 16 tests |
 | D | ADR-007 Workspace Isolation | ✅ | `docs/adr/ADR-007-*.md` | spec |
@@ -74,7 +74,7 @@ without rewriting the registries.
   already-enforced workspace isolation contract (persistence, graph, retrieval,
   scanner, RBAC).
 
-## Current test surface (209 tests, 3 skipped)
+## Current test surface (212 tests, 3 skipped)
 
 | Suite | Tests | Suite | Tests |
 |-------|-------|-------|-------|
@@ -90,7 +90,7 @@ without rewriting the registries.
 | test_rbac | 4 | test_persistence | 6 |
 | test_integration | 3 | test_integration_p2 | 1 |
 | test_mcp_sse | 5 | test_retrieval_backends | 17 (+3 skip) |
-| test_sdk_cli | 16 | test_mcp_streamable | 7 |
+| test_sdk_cli | 16 | test_mcp_streamable | 10 |
 
 ## Module coverage snapshot
 
@@ -105,7 +105,7 @@ without rewriting the registries.
 | kernel/rbac.py | 81% | kernel/persistence.py | 82% |
 | mcp/tools.py | 97% | mcp/client.py | 81% |
 | mcp/server.py | 81% | mcp/server_sse.py | 80% |
-| mcp/server_streamable.py | 82% | plugins/loader.py | 97% |
+| mcp/server_streamable.py | 88% | plugins/loader.py | 97% |
 | plugins/sdk/cli.py | 84% | plugins/sdk/validator.py | 87% |
 | kernel/retrieval.py | ~88% | kernel/retrieval_backends.py | 68%* |
 

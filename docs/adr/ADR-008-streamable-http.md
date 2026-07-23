@@ -58,17 +58,32 @@ can emit via `MCPServer.notify_tools_changed` through the session event queue.
 | `/mcp/v1/messages` | POST | JSON-RPC in, response in body; `Mcp-Session-Id` header; batch aggregate |
 | `/mcp/v1/events` | GET | SSE stream for server→client notifications; `Last-Event-ID` accepted |
 
-Verified in `tests/test_mcp_streamable.py` (7 tests, 82% cov): session creation,
-reuse, batch aggregation, notification → 202, unknown-session → 404, stream open.
+Verified in `tests/test_mcp_streamable.py` (10 tests, 88% cov): session creation,
+reuse, batch aggregation, notification → 202, unknown-session → 404, stream open,
+**persistent event log, `Last-Event-ID` backlog replay, restart survival**.
+
+## Durable sessions (implemented)
+
+Server→client SSE frames are persisted to `PersistenceRegistry` under a
+per-session workspace (`mcp:<session_id>`), modelled as the `McpSessionEvent`
+domain entity (`kernel/domain.py`). Each frame carries a monotonic `seq` used as
+the SSE `id`. On reconnect, `GET /mcp/v1/events` with a `Last-Event-ID: <n>`
+header replays all frames with `seq > n` **before** opening the live stream.
+
+- In-memory `PersistenceRegistry` → replay survives disconnects within a process.
+- **File-backed** `PersistenceRegistry` (`:memory:` replaced with a `.db` path)
+  → replay survives a full server restart.
+- Workspace isolation (ADR-007) is preserved: each session is its own
+  `mcp:<session_id>` workspace; no cross-session leakage.
 
 ## Consequences
 
 - **Good:** modern MCP transport; no query-param session coupling; batch-native;
-  reuses 100% of the JSON-RPC core; no new deps.
-- **Bad / cost:** in-memory sessions (no cross-restart durability, no resumable
-  replay yet); one TCP connection per GET /events stream.
-- **Future:** durable sessions (PersistenceRegistry), `Last-Event-ID` backlog
-  replay, optional `Mcp-Protocol-Version` negotiation header.
+  reuses 100% of the JSON-RPC core; no new deps; **durable, resumable sessions**.
+- **Bad / cost:** one TCP connection per GET /events stream; persistence write
+  is best-effort (DB errors are logged, never block the SSE path).
+- **Future:** optional `Mcp-Protocol-Version` negotiation header; session TTL /
+  eviction for long-lived file-backed logs.
 
 ## Rejected Alternatives
 
