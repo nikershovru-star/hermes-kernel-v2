@@ -1,0 +1,6 @@
+plugin_id: hermes_agents
+name: hermes_agents
+version: 2.2.1
+capabilities: [hermes.agent.echo]
+entrypoint: plugins.builtin.agents:EchoAgent
+dependencies: []

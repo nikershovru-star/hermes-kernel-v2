@@ -53,6 +53,7 @@ modules = [
     { path = "plugins", depends_on = ["kernel", "kernel.domain"] },
     { path = "plugins.builtin.desktop_control", depends_on = ["kernel", "kernel.domain", "plugins"] },
     { path = "plugins.builtin.human_emulation", depends_on = ["kernel", "kernel.domain", "plugins"] },
+    { path = "plugins.builtin.agents", depends_on = ["kernel", "kernel.domain", "plugins"] },
     { path = "mcp", depends_on = ["kernel", "kernel.domain"] },
 ]
 exclude = ["tests", "docs"]

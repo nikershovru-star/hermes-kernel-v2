@@ -1,6 +1,6 @@
 # Hermes Kernel v2 — Roadmap
 
-_Last updated: 2026-07-23 · **v2.1.0** · 246 passed, 3 skipped, 87% total coverage (CI gate ≥85% ✅)_
+_Last updated: 2026-07-23 · **v2.2.1** · 260 passed, 3 skipped, 88% total coverage (CI gate ≥85% ✅)_
 
 | Phase | Название | Статус | Этапы | Gate |
 |-------|----------|--------|-------|------|
@@ -21,6 +21,7 @@ _Last updated: 2026-07-23 · **v2.1.0** · 246 passed, 3 skipped, 87% total cove
 | ADR-011 | Desktop Control | ✅ | `plugins/builtin/desktop_control` | 10 tests, 88% |
 | ADR-012 | MCP Streamable hardening | ✅ | `mcp/server_streamable.py` | 6 tests, 86% |
 | ADR-013 | Human Emulation Layer | ✅ | `plugins/builtin/human_emulation/` | 18 tests, 86% |
+| ADR-016 | Agent/Plugin Unification | ✅ | `kernel/agent.py` + `kernel/capability.py` + `plugins/builtin/agents/` | 14 tests |
 
 > \* `kernel/retrieval_backends.py` coverage is **68% on Windows** (sqlite-vss
 > has no Windows wheels → its 3 tests skip). On Linux with `faiss-cpu` +
@@ -123,7 +124,7 @@ without rewriting the registries.
 
 ## Next up
 
-- **v2.1.0 tagged** ✅ — Human Emulation Layer (ADR-013): `BrowserAgent` (Playwright) + `InputSimulator` (pyautogui) + `HumanProfile`/`BrowserSession`/`ActionLog` entities + `ProfileManager` CRUD + 8 tools. `human` extra. 18 new tests; module 86% cov. Total 246 passed, 3 skipped, 87% cov.
+- **v2.2.1 tagged** ✅ — Agent/Plugin Unification (ADR-016): `BaseAgent` async lifecycle + `AgentRuntime` (live instances; `AgentRegistry` keeps declarative metadata), unified `Artifact` (`format`/`provenance`/`content: Any`), `CapabilityExecutor` (namespaced dispatch → `Artifact`, handlers injected to keep kernel→plugins axis). `EchoAgent` reference impl. 14 new tests. Total 260 passed, 3 skipped, 88% cov.
 - **Next cycles (future):** CV module (OCR + element detection), Behavior engine (scroll/reading patterns), RustDesk native remote, Knowledge-graph web UI, Plugin marketplace, Multi-node distributed kernel.
 - **RustDesk native remote control** — future option (pyautogui covers local).
 - **Knowledge graph visualization (web UI)** — future.

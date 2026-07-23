@@ -3,8 +3,8 @@
 > An async-first, event-driven **AI Operating System** kernel — Clean
 > Architecture, plugin-extensible, MCP-native.
 
-**Status:** v2.1.0 · **246 passed, 3 skipped, 87% coverage** (Python 3.11+).
-All phases P0–P5 + extensions A/A2/B/C/D/E/F + ADR-007..013 + CI axis-gate delivered.
+**Status:** v2.2.1 · **260 passed, 3 skipped, 88% coverage** (Python 3.11+).
+All phases P0–P5 + extensions A/A2/B/C/D/E/F + ADR-007..016 + CI axis-gate delivered.
 
 ---
 
@@ -291,6 +291,10 @@ Decisions are recorded as ADRs:
 - [ADR-013 — Human Emulation Layer](docs/adr/ADR-013-human-emulation.md) —
   `plugins.builtin.human_emulation`: Playwright `BrowserAgent` + pyautogui
   `InputSimulator` + `HumanProfile`/`BrowserSession`/`ActionLog` entities.
+- [ADR-016 — Agent/Plugin Unification](docs/adr/ADR-016-agent-unification.md) —
+  `BaseAgent` async lifecycle + `AgentRuntime`, unified `Artifact`
+  (`format`/`provenance`/`content: Any`), `CapabilityExecutor` (namespaced
+  dispatch → `Artifact`).
 
 ---
 

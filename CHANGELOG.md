@@ -4,6 +4,38 @@ All notable changes to Hermes Kernel v2 are documented here. The format is
 loosely based on [Keep a Changelog](https://keepachangelog.com/); this project
 adheres to **semantic versioning** (MAJOR.MINOR.PATCH).
 
+## [v2.2.1] — 2026-07-23 · Agent/Plugin Unification (ADR-016)
+
+### Added
+- **`BaseAgent`** (async lifecycle ABC, `kernel/agent.py`): `start() -> str`
+  (returns `agent_id`), `stop(agent_id) -> bool`, `execute(agent_id, task) ->
+  Artifact`, `status(agent_id) -> dict`. Mirrors `BasePlugin` but async (an agent
+  *executes* and *returns*).
+- **`AgentRuntime`** (`kernel/agent.py`): registry of *active* `BaseAgent`
+  instances (start/stop/execute/status/list/get). The runtime counterpart to the
+  existing declarative `AgentRegistry` (which `@sdk.agent` populates with
+  `Agent` metadata) — same split as `PluginRegistry` vs `PluginManifest`.
+- **Unified `Artifact`** (`kernel/domain.py`, extended): added `format: str`,
+  `provenance: list[str]`, widened `content: Any` (was `str`). Now versioned,
+  linkable, provenance-carrying — answers "where is the screenshot from
+  yesterday?" via workspace-scoped persistence.
+- **`CapabilityExecutor`** (`kernel/capability.py`, additive): `execute(
+  capability, params, context) -> Artifact` resolves a namespaced capability
+  (`"browser.navigate"`, `"desktop.click"`) to an **injected** async handler and
+  normalizes the result into an `Artifact`. Handlers are injected by the kernel
+  (no `kernel -> plugins` import), keeping the axis clean.
+- **`plugins/builtin/agents/echo_agent.py`**: `EchoAgent(BaseAgent)` reference
+  implementation exercising the full lifecycle without heavy optional deps.
+- `pyproject.toml`: explicit `plugins.builtin.agents` tach submodule.
+- 14 tests (`tests/test_agent_runtime.py`, `tests/test_artifact.py`,
+  `tests/test_capability_executor.py`); `tach` axis-gate stays green.
+
+### Unchanged (delivered earlier)
+- **v2.1.0** — Human Emulation Layer (ADR-013): Playwright `BrowserAgent` +
+  pyautogui `InputSimulator` + `HumanProfile`/`BrowserSession`/`ActionLog`.
+- **v2.0.0** — polish: explicit `plugins.builtin.desktop_control` tach submodule,
+  `screenshot` metadata, `CHANGELOG.md`.
+
 ## [v2.0.0] — 2026-07-23 · polish release
 
 Maintenance / hardening release. No kernel-API break; all existing tests stay
@@ -101,6 +133,7 @@ green (228 passed, 3 skipped, ~87% coverage).
 ---
 
 [Unreleased]: #changelog
+[v2.2.1]: #v221--2026-07-23--agentplugin-unification-adr-016
 [v2.1.0]: #v210--2026-07-23--human-emulation-layer
 [v2.0.0]: #v200--2026-07-23--polish-release
 [v1.2.0]: #v120--2026-07-23--mcp-streamable-http-hardening

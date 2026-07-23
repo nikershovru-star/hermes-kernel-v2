@@ -166,9 +166,18 @@ class Project(BaseEntity):
 
 
 class Artifact(BaseEntity):
-    type: str  # "note" | "diagram" | "report" | ...
-    content: str
-    source: Optional[str] = None
+    """Unified result object returned by capabilities / agents (ADR-016).
+
+    Replaces ad-hoc string/bytes payloads with a versioned, linkable,
+    provenance-carrying entity so a caller can answer "where is the screenshot
+    I took yesterday?" via workspace-scoped persistence + ``provenance``.
+    """
+
+    type: str  # "screenshot" | "code" | "text" | "dataset" | "note" | "report" ...
+    content: Any  # decoded payload (str, bytes, dict, ...)
+    format: str = "text"  # "png" | "py" | "md" | "json" | "base64" ...
+    source: Optional[str] = None  # "agent:browser" | "plugin:desktop" | ...
+    provenance: list[str] = Field(default_factory=list)  # ordered chain of action ids
 
 
 # --------------------------------------------------------------------------- #

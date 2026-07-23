@@ -11,7 +11,7 @@ import asyncio
 import logging
 from typing import Optional
 
-from kernel.domain import Capability, Tool
+from kernel.domain import Artifact, Capability, Tool
 from kernel.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
@@ -101,3 +101,79 @@ class CapabilityRegistry:
     async def list(self) -> list[Capability]:
         async with self._lock:
             return list(self._caps.values())
+
+class CapabilityExecutor:
+    """Unified, namespaced capability dispatch (ADR-016).
+
+    Resolves a capability string ("browser.navigate", "desktop.click") to an
+    injected async handler and returns a unified Artifact. The executor does NOT
+    import plugins — handlers are injected by the kernel, which gathers them from
+    plugin/agent instances (keeps the kernel -> plugins axis intact).
+
+    A handler signature is `async def handler(params: dict, context: dict | None)
+    -> Any`. Its return value is normalized into an Artifact:
+
+    * Artifact returned as-is (provenance appended).
+    * dict with content/type/format keys -> mapped onto Artifact.
+    * any other value -> wrapped as Artifact(type="result", content=value).
+    """
+
+    def __init__(
+        self,
+        handlers: dict[str, Any] | None = None,
+        capability_registry: "CapabilityRegistry | None" = None,
+    ) -> None:
+        # capability_name -> async handler(params, context) -> Any
+        self._handlers: dict[str, Any] = dict(handlers or {})
+        self._caps = capability_registry
+
+    def register_handler(self, capability: str, handler: Any) -> None:
+        """Register (or override) the handler for a namespaced capability."""
+        self._handlers[capability] = handler
+
+    async def execute(
+        self,
+        capability: str,
+        params: dict[str, Any],
+        context: dict[str, Any] | None = None,
+    ) -> Artifact:
+        """Dispatch ``capability`` with ``params``/``context``; return Artifact."""
+        handler = self._handlers.get(capability)
+        if handler is None and self._caps is not None:
+            cap = await self._caps.get_by_name(capability)
+            if cap is None:
+                raise KeyError(f"no handler or capability registered for {capability!r}")
+            raise KeyError(
+                f"capability {capability!r} declared but no handler injected"
+            )
+        if handler is None:
+            raise KeyError(f"no handler registered for capability {capability!r}")
+
+        result = await handler(params, context)
+        return self._normalize(result, capability)
+
+    @staticmethod
+    def _normalize(result: Any, capability: str) -> Artifact:
+        """Coerce a handler return value into a unified Artifact."""
+        if isinstance(result, Artifact):
+            artifact = result
+        elif isinstance(result, dict) and ("content" in result or "type" in result):
+            artifact = Artifact(
+                type=result.get("type", "result"),
+                content=result.get("content"),
+                format=result.get("format", "json"),
+                source=result.get("source", f"capability:{capability}"),
+                provenance=list(result.get("provenance", [])),
+            )
+        else:
+            artifact = Artifact(
+                type="result",
+                content=result,
+                format="json",
+                source=f"capability:{capability}",
+            )
+        artifact.provenance = artifact.provenance + [f"cap:{capability}"]
+        return artifact
+
+
+__all__ = ["CapabilityRegistry", "CapabilityExecutor"]
