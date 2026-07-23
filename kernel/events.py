@@ -199,6 +199,64 @@ class QueryBus:
         return await handler(query)
 
 
+# --------------------------------------------------------------------------- #
+# Workflow / Execution Platform events (ADR-019)
+# --------------------------------------------------------------------------- #
+class WorkflowStepStarted(DomainEvent):
+    """A workflow step began executing."""
+
+    def __init__(self, instance_id: str, step_id: str, capability: str) -> None:
+        super().__init__(
+            type="workflow.step_started",
+            aggregate_id=instance_id,
+            payload={"step_id": step_id, "capability": capability},
+        )
+
+
+class WorkflowStepCompleted(DomainEvent):
+    """A workflow step finished successfully."""
+
+    def __init__(self, instance_id: str, step_id: str, artifact_id: str, duration_ms: float) -> None:
+        super().__init__(
+            type="workflow.step_completed",
+            aggregate_id=instance_id,
+            payload={"step_id": step_id, "artifact_id": artifact_id, "duration_ms": duration_ms},
+        )
+
+
+class WorkflowStepFailed(DomainEvent):
+    """A workflow step failed (may retry or compensate)."""
+
+    def __init__(self, instance_id: str, step_id: str, error: str, attempt: int, will_retry: bool) -> None:
+        super().__init__(
+            type="workflow.step_failed",
+            aggregate_id=instance_id,
+            payload={"step_id": step_id, "error": error, "attempt": attempt, "will_retry": will_retry},
+        )
+
+
+class WorkflowStepAwaitingApproval(DomainEvent):
+    """A step with ``requires_approval`` paused the workflow."""
+
+    def __init__(self, instance_id: str, step_id: str, reason: str) -> None:
+        super().__init__(
+            type="workflow.step_awaiting_approval",
+            aggregate_id=instance_id,
+            payload={"step_id": step_id, "reason": reason},
+        )
+
+
+class WorkflowCompensating(DomainEvent):
+    """A compensation step is running for a failed step."""
+
+    def __init__(self, instance_id: str, failed_step: str, compensation_step: str) -> None:
+        super().__init__(
+            type="workflow.compensating",
+            aggregate_id=instance_id,
+            payload={"failed_step": failed_step, "compensation_step": compensation_step},
+        )
+
+
 __all__ = [
     "DomainEvent",
     "EventStore",
@@ -208,4 +266,9 @@ __all__ = [
     "Query",
     "QueryBus",
     "EventBus",
+    "WorkflowStepStarted",
+    "WorkflowStepCompleted",
+    "WorkflowStepFailed",
+    "WorkflowStepAwaitingApproval",
+    "WorkflowCompensating",
 ]

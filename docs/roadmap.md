@@ -1,6 +1,6 @@
 # Hermes Kernel v2 — Roadmap
 
-_Last updated: 2026-07-23 · **v2.4.0** · 297 passed, 3 skipped, 88% total coverage (CI gate ≥85% ✅)_
+_Last updated: 2026-07-23 · **v2.5.0** · 320 passed, 3 skipped, 89% total coverage (CI gate ≥85% ✅)_
 
 | Phase | Название | Статус | Этапы | Gate |
 |-------|----------|--------|-------|------|
@@ -24,6 +24,7 @@ _Last updated: 2026-07-23 · **v2.4.0** · 297 passed, 3 skipped, 88% total cove
 | ADR-016 | Agent/Plugin Unification | ✅ | `kernel/agent.py` + `kernel/capability.py` + `plugins/builtin/agents/` | 14 tests |
 | ADR-017 | Event Platform + Desktop Agent Vision | ✅ | `kernel/events.py` + `plugins/builtin/desktop_control/` | 31 tests, 88% |
 | ADR-018 | Capability Handler Auto-Discovery | ✅ | `kernel/discovery.py` + `kernel/capability.py` | 6 tests |
+| ADR-019 | Workflow Runtime Foundation | ✅ | `kernel/workflow.py` + `kernel/planner.py` + `kernel/domain.py` | 23 tests, 89% |
 
 > \* `kernel/retrieval_backends.py` coverage is **68% on Windows** (sqlite-vss
 > has no Windows wheels → its 3 tests skip). On Linux with `faiss-cpu` +
@@ -122,13 +123,26 @@ without rewriting the registries.
 | kernel/retrieval.py | ~88% | kernel/retrieval_backends.py | 68%* |
 
 > \* 68% on Windows (sqlite-vss unavailable → VSS branch skips); ~87% on Linux
-> with both `faiss-cpu` + `sqlite-vss` installed.
+- **v2.5.0 tagged** ✅ — Workflow Runtime Foundation (ADR-019): `kernel/workflow.py`
+  (`WorkflowEngine` state machine — retry/backoff, reverse-order compensation,
+  human-approval PAUSE, input-mapping from prior steps, every transition emits a
+  `DomainEvent`), `kernel/planner.py` (rule-based goal→`Workflow`), `Workflow`
+  domain model replaces the stub and **activates the dead `Task.workflow_id`**
+  field. `AgentRuntime.execute(..., workflow_id=None)` now propagates it. 23 new
+  tests (320 total, 89.41% coverage).
+  - **What hurts now (deferred → next ADRs):** Planner is **rule-based only**
+    (no LLM/reasoning → ADR-023); compensation is **reverse-order step
+    execution**, not a full Saga (future); human approval is **in-memory PAUSED
+    state** (no external approval service/UI → future KG visualizer); workflows
+    are **single-node** (no distributed execution → v5 Swarm/Teams ADR-022);
+    DAG is executed as an **ordered step list** (no parallel/conditional
+    branching yet).
 
 ## Next up
-
-- **v2.4.0 tagged** ✅ — Capability Handler Auto-Discovery (ADR-018): `kernel/discovery.py` (`discover_handlers` reflects over loaded plugin/agent instances — BaseAgent → `register_agent`, `@sdk.tool` methods → handlers) + `CapabilityExecutor.autodiscover(instances)`. No manual bootstrap wiring; kernel→plugins axis preserved (lazy `plugins.sdk.tool` import breaks import cycle). 6 new tests. Total 297 passed, 3 skipped, 88% cov. Next: ADR-019 event-store snapshots.
-- **Next cycles (future):** CV module (OCR + element detection), Behavior engine (scroll/reading patterns), RustDesk native remote, Knowledge-graph web UI, Plugin marketplace, Multi-node distributed kernel.
-- **RustDesk native remote control** — future option (pyautogui covers local).
+- **v2.6.0 — ADR-020: Sandbox** (plugin execution isolation / resource limits)
+- v2.7.0 — ADR-021: Health & Recovery (liveness, dead-letter, auto-restart)
+- v2.8.0 — ADR-022: Swarm / Teams (multi-agent orchestration)
+- v2.9.0 — ADR-023: Dynamic Planner (LLM-based replanning)
 - **Knowledge graph visualization (web UI)** — future.
 - **Plugin marketplace / remote install** — future.
 - **Multi-node distributed kernel** — future.

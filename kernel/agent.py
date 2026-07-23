@@ -117,8 +117,17 @@ class AgentRuntime:
         )
         return ok
 
-    async def execute(self, agent_id: str, task: Task) -> Artifact:
-        """Execute ``task`` on the running agent identified by ``agent_id``."""
+    async def execute(
+        self, agent_id: str, task: Task, workflow_id: str | None = None
+    ) -> Artifact:
+        """Execute ``task`` on the running agent identified by ``agent_id``.
+
+        If ``workflow_id`` is supplied, it is propagated onto ``task.workflow_id``
+        (ADR-019: activates the previously-dead ``Task.workflow_id`` field, linking
+        the task to its WorkflowInstance).
+        """
+        if workflow_id is not None:
+            task.workflow_id = workflow_id
         agent = self._agents.get(agent_id)
         if agent is None:
             raise KeyError(f"agent '{agent_id}' is not running")

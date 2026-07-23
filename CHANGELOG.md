@@ -4,7 +4,33 @@ All notable changes to Hermes Kernel v2 are documented here. The format is
 loosely based on [Keep a Changelog](https://keepachangelog.com/); this project
 adheres to **semantic versioning** (MAJOR.MINOR.PATCH).
 
-## [v2.4.0] — 2026-07-23 · Capability Handler Auto-Discovery (ADR-018)
+## [v2.5.0] — 2026-07-23 · Workflow Runtime Foundation (ADR-019)
+
+### Added
+- **`kernel/workflow.py`** — `WorkflowEngine` state machine + execution engine:
+  - resolves step capabilities via `CapabilityExecutor` / `AgentRuntime`
+  - input-mapping from previous step results (`<step>.output.<field>`)
+  - retry with exponential backoff (`RetryPolicy`)
+  - reverse-order compensation on exhaustion (`WorkflowStep.compensation`)
+  - human-approval PAUSE gate (`requires_approval` → `approve()` resume/reject)
+  - emits `DomainEvent`s for every transition (reuses `EventBus` + `EventStore`)
+- **`kernel/planner.py`** — `Planner` (rule-based goal→`Workflow` via capability
+  templates; LLM/reasoning planner deferred to ADR-023)
+- **`kernel/domain.py`** — replaced the stub `Workflow` with a full model
+  (`WorkflowStep`, `WorkflowInstance`, `WorkflowStatus` enum, `RetryPolicy`,
+  `WorkflowTrigger`); **activates the previously-dead `Task.workflow_id` field**
+- **`kernel/agent.py`** — `AgentRuntime.execute(agent_id, task, workflow_id=None)`
+  now propagates `workflow_id` onto `task.workflow_id`
+- **`kernel/events.py`** — 5 new `Workflow*` `DomainEvent` subclasses
+- **Tests:** `test_workflow_engine.py` (14), `test_planner.py` (7),
+  `test_workflow_events.py` (3) — total **320 passed, 3 skipped, 89.41% cov**
+
+### Honest notes (deferred)
+- Planner is rule-based only (no LLM) → ADR-023
+- Compensation is reverse-order, not a full Saga → future
+- Human approval is in-memory PAUSED state (no external service/UI) → future
+- Single-node only (no distributed execution) → v5 Swarm/Teams (ADR-022)
+- DAG executed as ordered step list (no parallel/conditional branching yet)
 
 ### Added
 - **`kernel/discovery.py`** — `discover_handlers(instances, executor)`: post-load
@@ -194,6 +220,7 @@ green (228 passed, 3 skipped, ~87% coverage).
 ---
 
 [Unreleased]: #changelog
+[v2.5.0]: #v250--2026-07-23--workflow-runtime-foundation-adr-019
 [v2.4.0]: #v240--2026-07-23--capability-handler-auto-discovery-adr-018
 [v2.3.0]: #v230--2026-07-23--event-platform--desktop-agent-vision-adr-017
 [v2.2.1]: #v221--2026-07-23--agentplugin-unification-adr-016

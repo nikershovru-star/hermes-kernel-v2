@@ -3,8 +3,8 @@
 > An async-first, event-driven **AI Operating System** kernel — Clean
 > Architecture, plugin-extensible, MCP-native.
 
-**Status:** v2.4.0 · **297 passed, 3 skipped, 88% coverage** (Python 3.11+).
-All phases P0–P5 + extensions A/A2/B/C/D/E/F + ADR-007..018 + CI axis-gate delivered.
+**Status:** v2.5.0 · **320 passed, 3 skipped, 89% coverage** (Python 3.11+).
+All phases P0–P5 + extensions A/A2/B/C/D/E/F + ADR-007..019 + CI axis-gate delivered.
 
 ---
 
@@ -303,6 +303,11 @@ Decisions are recorded as ADRs:
   `kernel/discovery.py` + `CapabilityExecutor.autodiscover(instances)`: reflects
   over loaded plugin/agent instances and wires their capabilities (no plugin
   import, axis clean). Replaces manual bootstrap wiring.
+- [ADR-019 — Workflow Runtime Foundation](docs/adr/ADR-019-workflow-runtime.md) —
+  `kernel/workflow.py` (`WorkflowEngine` state machine: retry/backoff,
+  reverse-order compensation, human-approval PAUSE, input-mapping from prior
+  steps), `kernel/planner.py` (goal→`Workflow`), `Workflow` domain model
+  replaces the stub + activates dead `Task.workflow_id`. 23 tests.
 
 ---
 

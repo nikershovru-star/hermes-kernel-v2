@@ -20,6 +20,7 @@ def _make(entity_name: str) -> d.BaseEntity:
         "Tool": dict(name="t", capability="hermes.search"),
         "Agent": dict(name="a"),
         "Workflow": dict(name="w"),
+        "WorkflowInstance": dict(workflow_id="wf1", status="draft"),
         "Project": dict(name="p", domain="prog"),
         "Artifact": dict(type="note", content="c"),
         "Capability": dict(name="hermes.search", description="d", tools=["filesystem"], schema={}),

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from enum import Enum
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field
@@ -150,10 +151,78 @@ class Agent(BaseEntity):
     status: str = "idle"  # idle|busy|offline
 
 
-class Workflow(BaseEntity):
+class WorkflowStatus(str, Enum):
+    """Lifecycle states of a Workflow (ADR-019 state machine)."""
+
+    DRAFT = "draft"
+    PENDING = "pending"  # waiting for trigger
+    RUNNING = "running"
+    PAUSED = "paused"  # waiting for human approval
+    COMPLETED = "completed"
+    FAILED = "failed"
+    COMPENSATING = "compensating"  # running compensation steps
+
+
+class RetryPolicy(BaseModel):
+    """Retry configuration for a workflow step (ADR-019)."""
+
+    max_attempts: int = 3
+    backoff_seconds: float = 1.0
+    exponential: bool = True
+
+
+class WorkflowTrigger(BaseModel):
+    """What starts a workflow: manual, event, schedule, or webhook (ADR-019)."""
+
+    type: str = "manual"  # manual | event | schedule | webhook
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkflowStep(BaseModel):
+    """One node in a Workflow DAG (ADR-019).
+
+    ``input_mapping`` references previous steps' outputs via dotted paths,
+    e.g. ``{"x": "step_1.output.bbox.x"}`` (resolved by the engine).
+    """
+
+    id: str
     name: str
-    steps: list[str] = Field(default_factory=list)  # ordered entity ids
-    status: str = "draft"  # draft|active|done
+    capability: str  # "desktop.screenshot", "desktop.ocr", "agent.reason" ...
+    input_mapping: dict[str, str] = Field(default_factory=dict)
+    retry_policy: RetryPolicy = Field(default_factory=RetryPolicy)
+    compensation: str | None = None  # step_id to run on failure
+    requires_approval: bool = False
+    timeout_seconds: float = 30.0
+
+
+class Workflow(BaseEntity):
+    """A declarative, executable workflow DAG (ADR-019).
+
+    Replaces the earlier primitive ``Workflow`` (name + list[str] step ids).
+    A workflow is a DAG of ``WorkflowStep`` nodes with explicit transitions,
+    retry policies, compensation, and optional human-approval gates — not a
+    linear script.
+    """
+
+    name: str
+    description: str = ""
+    steps: list[WorkflowStep] = Field(default_factory=list)
+    status: WorkflowStatus = WorkflowStatus.DRAFT
+    trigger: WorkflowTrigger | None = None
+    context: dict[str, Any] = Field(default_factory=dict)  # shared workflow context
+
+
+class WorkflowInstance(BaseEntity):
+    """A running instance of a Workflow — state-machine snapshot (ADR-019)."""
+
+    workflow_id: str
+    status: WorkflowStatus
+    current_step_id: str | None = None
+    step_results: dict[str, Any] = Field(default_factory=dict)  # step_id -> artifact id/content
+    step_attempts: dict[str, int] = Field(default_factory=dict)
+    event_log: list[str] = Field(default_factory=list)  # DomainEvent ids
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -289,6 +358,7 @@ ENTITY_TYPES = {
     "Tool": Tool,
     "Agent": Agent,
     "Workflow": Workflow,
+    "WorkflowInstance": WorkflowInstance,
     "Project": Project,
     "Artifact": Artifact,
     "Capability": Capability,
