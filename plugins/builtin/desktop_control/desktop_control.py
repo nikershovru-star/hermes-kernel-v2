@@ -216,7 +216,12 @@ class DesktopControlPlugin(BasePlugin):
         },
     )
     async def screenshot(self, region: list[int] | None = None) -> dict[str, Any]:
-        """Capture a PNG screenshot; return base64-encoded image data."""
+        """Capture a PNG screenshot.
+
+        Returns metadata-enriched payload so an MCP client knows how to decode
+        the image without out-of-band assumptions:
+        ``{"format": "png", "encoding": "base64", "image": <str>}``.
+        """
         pyautogui = _require_pyautogui()
         _require_pillow()  # ensure Pillow is importable for downstream save
         region_tuple = tuple(region) if region else None
@@ -224,4 +229,4 @@ class DesktopControlPlugin(BasePlugin):
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         encoded = base64.b64encode(buf.getvalue()).decode("utf-8")
-        return {"image": encoded}
+        return {"format": "png", "encoding": "base64", "image": encoded}

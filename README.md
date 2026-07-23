@@ -3,7 +3,7 @@
 > An async-first, event-driven **AI Operating System** kernel — Clean
 > Architecture, plugin-extensible, MCP-native.
 
-**Status:** v1.2.0 · **228 passed, 3 skipped, 87% coverage** (Python 3.11+).
+**Status:** v2.0.0 · **228 passed, 3 skipped, 87% coverage** (Python 3.11+).
 All phases P0–P5 + extensions A/A2/B/C/D/E + ADR-007..012 + CI axis-gate delivered.
 
 ---
@@ -329,7 +329,7 @@ matrix Python 3.11 + 3.12. Three gates, in order:
 | Gate | Command | Threshold |
 |------|---------|-----------|
 | Axis (Clean Architecture) | `python -m tach check` | zero violations |
-| Tests | `python -m pytest tests/` | 212 passed, 0 failed |
+| Tests | `python -m pytest tests/` | 228 passed, 0 failed |
 | Coverage | `pytest --cov --cov-fail-under=85` | ≥ 85% |
 
 The axis contract (in `[tool.tach]` in `pyproject.toml`):
@@ -338,12 +338,17 @@ The axis contract (in `[tool.tach]` in `pyproject.toml`):
 kernel.domain  →  []                      (shared pydantic contract, leaf)
 kernel        →  [kernel.domain]
 plugins       →  [kernel, kernel.domain]
+plugins.builtin.desktop_control  →  [kernel, kernel.domain, plugins]   # explicit submodule
 mcp           →  [kernel, kernel.domain]
 tests / docs  →  excluded
 ```
 
 `kernel` never imports `plugins` (the `load_paths` loader is injected, not
 imported). `kernel.domain` is the common contract everyone may depend on.
+Explicit submodules (e.g. `plugins.builtin.desktop_control`) are declared so
+tach enforces the boundary transitively (submodules are not auto-inherited).
+
+See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 
 Local run:
 

@@ -181,6 +181,9 @@ def test_screenshot_returns_base64() -> None:
         result = asyncio.run(plugin.screenshot())
     assert "image" in result
     assert isinstance(result["image"], str)
+    # metadata-enriched payload (v2.0.0): client knows how to decode
+    assert result.get("format") == "png"
+    assert result.get("encoding") == "base64"
     # decodes back to the fake PNG bytes we wrote in _mock_pyautogui
     import base64
 

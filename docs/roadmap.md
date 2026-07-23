@@ -1,6 +1,6 @@
 # Hermes Kernel v2 — Roadmap
 
-_Last updated: 2026-07-23 · **v1.2.0** · 228 passed, 3 skipped, 87% total coverage (CI gate ≥85% ✅)_
+_Last updated: 2026-07-23 · **v2.0.0** · 228 passed, 3 skipped, 87% total coverage (CI gate ≥85% ✅)_
 
 | Phase | Название | Статус | Этапы | Gate |
 |-------|----------|--------|-------|------|
@@ -122,7 +122,10 @@ without rewriting the registries.
 
 ## Next up
 
-- **v1.2.0 tagged** ✅ — MCP Streamable HTTP hardening (ADR-012): Session TTL eviction + `Mcp-Protocol-Version` negotiation (426 on mismatch). 6 new tests; `server_streamable.py` 86% cov. Total 228 passed, 3 skipped, 87% cov.
+- **v2.0.0 tagged** ✅ — polish: explicit tach submodule for `plugins.builtin.desktop_control`, `screenshot` returns `format`/`encoding` metadata, `CHANGELOG.md` added. 228 passed, 3 skipped, 87% cov.
 - **RustDesk native remote control** — future option (pyautogui covers local).
+- **Knowledge graph visualization (web UI)** — future.
+- **Plugin marketplace / remote install** — future.
+- **Multi-node distributed kernel** — future.
 
 See the [ADRs](adr/) for architectural decisions behind each phase.
