@@ -9,19 +9,25 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
 
-      - name: Install
+      - name: Install (incl. dev deps for tach axis-gate)
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e .
-          python -m pip install pytest pytest-asyncio pytest-cov
+          python -m pip install -e ".[dev]"
+
+      - name: Tach axis gate (Clean Architecture)
+        run: python -m tach check
 
       - name: Test + coverage gate (>=85%)
         run: |

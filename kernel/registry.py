@@ -135,13 +135,24 @@ class PluginRegistry:
             return True
         return False
 
-    def load_paths(self, paths: list[Any]) -> list[Any]:
-        """Scan + load every plugin under *paths* (via plugins.loader)."""
+    def load_paths(self, paths: list[Any], loader: Any = None) -> list[Any]:
+        """Scan + load every plugin under *paths* using an injected loader.
+
+        The loader is injected (not imported) so the kernel core stays
+        independent of the ``plugins`` package (Clean Architecture axis:
+        ``plugins -> kernel``, never the reverse). ``loader`` must be a
+        callable accepting an iterable of path-likes and returning a list of
+        ``BasePlugin`` instances (e.g. ``plugins.loader.auto_load``).
+        """
         from pathlib import Path
 
-        from plugins.loader import auto_load
-
-        loaded = auto_load([Path(str(p)) for p in paths])
+        if loader is None:
+            raise ValueError(
+                "load_paths requires an explicit loader callable "
+                "(e.g. plugins.loader.auto_load) to avoid a kernel->plugins "
+                "dependency inversion"
+            )
+        loaded = loader([Path(str(p)) for p in paths])
         for inst in loaded:
             self.register_sync(inst.manifest, inst)
         return loaded

@@ -214,9 +214,10 @@ def _run_command(args: argparse.Namespace) -> int:
         from pathlib import Path
 
         from kernel.registry import PluginRegistry
+        from plugins.loader import auto_load
 
         reg = PluginRegistry()
-        reg.load_paths([Path(args.plugins_dir)])
+        reg.load_paths([Path(args.plugins_dir)], loader=auto_load)
         infos = reg.list_plugins()
         if not infos:
             print(f"(no plugins found in {args.plugins_dir})")
@@ -245,9 +246,10 @@ def _run_command(args: argparse.Namespace) -> int:
         from pathlib import Path
 
         from kernel.registry import PluginRegistry
+        from plugins.loader import auto_load
 
         reg = PluginRegistry()
-        reg.load_paths([Path(args.plugins_dir)])
+        reg.load_paths([Path(args.plugins_dir)], loader=auto_load)
         if reg.disable(args.name):
             print(f"disabled {args.name}")
             return 0

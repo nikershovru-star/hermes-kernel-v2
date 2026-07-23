@@ -22,7 +22,7 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest>=8.0", "pytest-asyncio>=0.23", "pytest-cov>=5.0"]
-dev = ["ruff>=0.5", "tach>=0.7"]
+dev = ["ruff>=0.5", "tach>=0.9"]
 faiss = ["faiss-cpu>=1.8"]
 vss = ["sqlite-vss>=0.1"]
 all = ["faiss-cpu>=1.8", "sqlite-vss>=0.1"]
@@ -41,12 +41,14 @@ target-version = "py311"
 
 [tool.tach]
 # Axis-of-dependency contract (enforced in CI):
-#   interface (mcp) -> service (runtime, later) -> kernel -> domain
-# domain must NOT import from kernel/plugins/mcp.
+#   mcp -> kernel -> kernel.domain   (interface depends on core, core on domain)
+#   plugins -> kernel -> kernel.domain
+# kernel.domain is the shared contract (pure pydantic) — everyone may import it.
+# tests/docs are excluded from the gate.
 modules = [
     { path = "kernel.domain", depends_on = [] },
     { path = "kernel", depends_on = ["kernel.domain"] },
-    { path = "plugins", depends_on = ["kernel"] },
-    { path = "mcp", depends_on = ["kernel"] },
+    { path = "plugins", depends_on = ["kernel", "kernel.domain"] },
+    { path = "mcp", depends_on = ["kernel", "kernel.domain"] },
 ]
 exclude = ["tests", "docs"]

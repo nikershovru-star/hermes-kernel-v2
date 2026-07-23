@@ -276,6 +276,40 @@ Researcher()  # registration happens on construction
 
 ---
 
+## CI / Dependency axis gate
+
+GitHub Actions (`.github/workflows/ci.yml`) runs on every push/PR to `main`,
+matrix Python 3.11 + 3.12. Three gates, in order:
+
+| Gate | Command | Threshold |
+|------|---------|-----------|
+| Axis (Clean Architecture) | `python -m tach check` | zero violations |
+| Tests | `python -m pytest tests/` | 212 passed, 0 failed |
+| Coverage | `pytest --cov --cov-fail-under=85` | ≥ 85% |
+
+The axis contract (in `[tool.tach]` in `pyproject.toml`):
+
+```
+kernel.domain  →  []                      (shared pydantic contract, leaf)
+kernel        →  [kernel.domain]
+plugins       →  [kernel, kernel.domain]
+mcp           →  [kernel, kernel.domain]
+tests / docs  →  excluded
+```
+
+`kernel` never imports `plugins` (the `load_paths` loader is injected, not
+imported). `kernel.domain` is the common contract everyone may depend on.
+
+Local run:
+
+```bash
+python -m pip install -e ".[dev]"
+python -m tach check     # dependency axis
+python -m pytest tests/  # full suite
+```
+
+---
+
 ## License
 
 Internal / unreleased.

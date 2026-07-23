@@ -96,11 +96,12 @@ def test_enable_clears_disabled() -> None:
 
 
 def test_load_paths_via_loader(tmp_path: Path) -> None:
+    from plugins.loader import auto_load
     from plugins.sdk.cli import scaffold_plugin
 
     scaffold_plugin("demo", tmp_path / "demo")
     reg = PluginRegistry()
-    loaded = reg.load_paths([tmp_path])
+    loaded = reg.load_paths([tmp_path], loader=auto_load)
     assert len(loaded) == 1
     infos = reg.list_plugins()
     assert infos[0].name == "demo"

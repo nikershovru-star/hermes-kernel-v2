@@ -114,8 +114,8 @@ without rewriting the registries.
 
 ## Next up
 
-- **MCP Streamable HTTP durable sessions**: `Last-Event-ID` replay + session
-  persistence via `PersistenceRegistry` (currently in-memory only).
-- **CI tach axis-gate** hardening (already in `pyproject.toml`; enforce in CI).
+- **Desktop control** (RustDesk/pyautogui) — future, after kernel v1.0.0.
+- **Session TTL / eviction** for long-lived file-backed MCP event logs.
+- **`Mcp-Protocol-Version`** negotiation header for Streamable HTTP.
 
 See the [ADRs](adr/) for architectural decisions behind each phase.
