@@ -1,0 +1,6 @@
+plugin_id: human_emulation
+name: human_emulation
+version: 2.1.0
+capabilities: [hermes.human.browser, hermes.human.input]
+entrypoint: plugins.builtin.human_emulation:HumanEmulationPlugin
+dependencies: [playwright, pyautogui]

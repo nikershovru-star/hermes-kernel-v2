@@ -3,8 +3,8 @@
 > An async-first, event-driven **AI Operating System** kernel — Clean
 > Architecture, plugin-extensible, MCP-native.
 
-**Status:** v2.0.0 · **228 passed, 3 skipped, 87% coverage** (Python 3.11+).
-All phases P0–P5 + extensions A/A2/B/C/D/E + ADR-007..012 + CI axis-gate delivered.
+**Status:** v2.1.0 · **246 passed, 3 skipped, 87% coverage** (Python 3.11+).
+All phases P0–P5 + extensions A/A2/B/C/D/E/F + ADR-007..013 + CI axis-gate delivered.
 
 ---
 
@@ -200,6 +200,23 @@ Two durability / interoperability hardenings on top of ADR-008 (see **ADR-012**)
   on every response; a mismatch yields `426 Upgrade Required` advertising the
   supported version. Default server version: `2024-11-05`.
 
+### F — Human Emulation Layer (`plugins/builtin/human_emulation/`, ADR-013)
+
+Autonomous, human-like automation (browse sites, click, type) when the user is
+away. Builtin plugin exposing 8 Tools under `hermes.human.browser` /
+`hermes.human.input`:
+
+- **`BrowserAgent`** — async Playwright wrapper (visible browser): `browser_start`
+  / `navigate` / `click` / `type` (human WPM + rare typos) / `screenshot` / `close`.
+- **`InputSimulator`** — pyautogui with human-like micro-delays + occasional
+  typos; `FAILSAFE=True` (cursor-to-corner aborts).
+- **`HumanProfile`** domain entity — the "digital twin" (typing speed, delays,
+  screen resolution, user agent). `BrowserSession` + `ActionLog` entities give a
+  full audit trail (workspace-isolated, ADR-007).
+
+Optional deps behind the `[human]` extra (`playwright`, `pyautogui`); the kernel
+imports cleanly without them (lazy import + clear `RuntimeError`).
+
 ---
 
 ## Quick start
@@ -271,6 +288,9 @@ Decisions are recorded as ADRs:
 - [ADR-012 — MCP Streamable HTTP hardening](docs/adr/ADR-012-mcp-streamable-hardening.md) —
   `McpSessionEvent` TTL eviction (background task) + `Mcp-Protocol-Version`
   negotiation (426 on mismatch).
+- [ADR-013 — Human Emulation Layer](docs/adr/ADR-013-human-emulation.md) —
+  `plugins.builtin.human_emulation`: Playwright `BrowserAgent` + pyautogui
+  `InputSimulator` + `HumanProfile`/`BrowserSession`/`ActionLog` entities.
 
 ---
 

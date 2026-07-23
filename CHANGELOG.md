@@ -28,6 +28,40 @@ green (228 passed, 3 skipped, ~87% coverage).
 - **v1.0.0** — Core kernel stable: P0–P5 + extensions A/A2/B/C/D + ADR-007..011
   + CI axis-gate (tach).
 
+## [v2.1.0] — 2026-07-23 · Human Emulation Layer
+
+### Added
+- **Human Emulation Layer (ADR-013)** — builtin plugin under
+  `plugins.builtin.human_emulation/` for autonomous, human-like automation:
+  - `BrowserAgent` — async Playwright wrapper (visible browser): `browser_start`
+    / `navigate` / `click` / `type` (human WPM + rare typos) / `screenshot` /
+    `close`, usable as an async context manager. Playwright is a **lazy optional
+    dependency** (module import guarded; clear `RuntimeError` if absent).
+  - `InputSimulator` — pyautogui wrapper with human-like micro-delays + occasional
+    typos; `FAILSAFE = True` (cursor-to-corner aborts). Lazy optional dep.
+  - `ProfileManager` — async CRUD over `PersistenceRegistry` for `HumanProfile`
+    (workspace-isolated, ADR-007).
+  - `HumanEmulationPlugin` — 8 Tools (`browser_start` / `navigate` / `click` /
+    `type` / `screenshot` / `close`, `input_mouse_move` / `input_type`), declared
+    with `@sdk.tool` and registered explicitly via `register_tools()` (same safe
+    pattern as `desktop_control` — no global SDK state at import).
+- **Domain entities** (registered in `PersistenceRegistry._TYPE_TO_CLASS`):
+  - `HumanProfile` — digital-twin settings (typing speed, typo rate, delays,
+    screen resolution, user agent).
+  - `BrowserSession` — one browser tab/window; `profile_id` FK, audit fields.
+  - `ActionLog` — full audit trail of every emulated action.
+- `pyproject.toml`: `[human]` extra (`playwright`, `pyautogui`) + `all` extra
+  extended; explicit `plugins.builtin.human_emulation` tach submodule.
+- 18 tests (`tests/test_human_emulation.py`, 86% module coverage); Playwright /
+  pyautogui mocked — no real browser/desktop in CI.
+
+### Unchanged (delivered in earlier releases)
+- **v2.0.0** — polish: explicit `plugins.builtin.desktop_control` tach submodule,
+  `screenshot` returns `format`/`encoding` metadata, `CHANGELOG.md` added.
+- **v1.2.0** — MCP Streamable HTTP hardening: Session TTL / eviction (background
+  async task trims `McpSessionEvent` older than `session_ttl`, default 24h) and
+  `Mcp-Protocol-Version` negotiation (mismatch → `426 Upgrade Required`).
+
 ## [v1.2.0] — 2026-07-23 · MCP Streamable HTTP hardening
 
 ### Added
@@ -67,6 +101,7 @@ green (228 passed, 3 skipped, ~87% coverage).
 ---
 
 [Unreleased]: #changelog
+[v2.1.0]: #v210--2026-07-23--human-emulation-layer
 [v2.0.0]: #v200--2026-07-23--polish-release
 [v1.2.0]: #v120--2026-07-23--mcp-streamable-http-hardening
 [v1.1.0]: #v110--2026-07-23--desktop-control-plugin

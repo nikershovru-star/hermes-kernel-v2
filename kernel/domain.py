@@ -231,6 +231,42 @@ class User(BaseEntity):
     roles: list[str] = Field(default_factory=list)
 
 
+# --------------------------------------------------------------------------- #
+# Human Emulation Layer (ADR-013)
+# --------------------------------------------------------------------------- #
+class HumanProfile(BaseEntity):
+    """Digital-twin profile describing a human's behaviour for emulation."""
+
+    name: str
+    typing_speed_wpm: int = 60
+    typo_rate: float = 0.02
+    pause_between_actions: tuple[float, float] = (0.5, 2.0)
+    preferred_browser: str = "chromium"
+    screen_resolution: tuple[int, int] = (1920, 1080)
+    user_agent: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+
+
+class BrowserSession(BaseEntity):
+    """One browser session (tab/window) owned by a HumanProfile."""
+
+    profile_id: str  # FK to HumanProfile.id
+    url: str
+    status: str = "idle"  # idle | loading | interacting | closed
+    screenshot_path: Optional[str] = None
+    last_action: Optional[str] = None
+
+
+class ActionLog(BaseEntity):
+    """Audit trail of every emulated action (accountability)."""
+
+    session_id: str
+    action_type: str  # navigate | click | type | screenshot | move | key
+    target: Optional[str] = None  # selector, coordinates, etc.
+    payload: dict[str, Any] = Field(default_factory=dict)
+    success: bool = True
+    error: Optional[str] = None
+
+
 # Convenience registry for tests / loaders
 ENTITY_TYPES = {
     "Document": Document,
@@ -251,4 +287,7 @@ ENTITY_TYPES = {
     "Dataset": Dataset,
     "Conversation": Conversation,
     "User": User,
+    "HumanProfile": HumanProfile,
+    "BrowserSession": BrowserSession,
+    "ActionLog": ActionLog,
 }

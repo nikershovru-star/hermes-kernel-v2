@@ -26,7 +26,8 @@ dev = ["ruff>=0.5", "tach>=0.9"]
 faiss = ["faiss-cpu>=1.8"]
 vss = ["sqlite-vss>=0.1"]
 desktop = ["pyautogui>=0.9", "Pillow>=10.0"]
-all = ["faiss-cpu>=1.8", "sqlite-vss>=0.1", "pyautogui>=0.9", "Pillow>=10.0"]
+human = ["playwright>=1.40", "pyautogui>=0.9", "Pillow>=10.0"]
+all = ["faiss-cpu>=1.8", "sqlite-vss>=0.1", "pyautogui>=0.9", "Pillow>=10.0", "playwright>=1.40"]
 
 [project.scripts]
 hermes = "plugins.sdk.cli:main"
@@ -51,6 +52,7 @@ modules = [
     { path = "kernel", depends_on = ["kernel.domain"] },
     { path = "plugins", depends_on = ["kernel", "kernel.domain"] },
     { path = "plugins.builtin.desktop_control", depends_on = ["kernel", "kernel.domain", "plugins"] },
+    { path = "plugins.builtin.human_emulation", depends_on = ["kernel", "kernel.domain", "plugins"] },
     { path = "mcp", depends_on = ["kernel", "kernel.domain"] },
 ]
 exclude = ["tests", "docs"]

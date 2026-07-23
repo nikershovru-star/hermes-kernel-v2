@@ -42,6 +42,9 @@ from kernel.domain import (
     McpSessionEvent,
     Relation,
     Workspace,
+    HumanProfile,
+    BrowserSession,
+    ActionLog,
     ENTITY_TYPES,
 )
 
@@ -55,6 +58,9 @@ _TYPE_TO_CLASS: dict[str, Type[BaseEntity]] = {
     "Relation": Relation,
     "Workspace": Workspace,
     "McpSessionEvent": McpSessionEvent,
+    "HumanProfile": HumanProfile,
+    "BrowserSession": BrowserSession,
+    "ActionLog": ActionLog,
 }
 
 

@@ -27,6 +27,9 @@ def _make(entity_name: str) -> d.BaseEntity:
         "Dataset": dict(name="ds", source="s3", format="csv"),
         "Conversation": dict(title="t", messages=[{"role": "user", "content": "x"}]),
         "User": dict(username="alice", hashed_password="salt$hash", roles=["admin"]),
+        "HumanProfile": dict(name="hp", typing_speed_wpm=60, typo_rate=0.02),
+        "BrowserSession": dict(profile_id="p1", url="about:blank", status="idle"),
+        "ActionLog": dict(session_id="s1", action_type="click", target="#btn"),
     }
     return d.ENTITY_TYPES[entity_name](**cases[entity_name])
 
