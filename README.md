@@ -3,8 +3,8 @@
 > An async-first, event-driven **AI Operating System** kernel — Clean
 > Architecture, plugin-extensible, MCP-native.
 
-**Status:** v2.3.0 · **291 passed, 3 skipped, 88% coverage** (Python 3.11+).
-All phases P0–P5 + extensions A/A2/B/C/D/E/F + ADR-007..017 + CI axis-gate delivered.
+**Status:** v2.4.0 · **297 passed, 3 skipped, 88% coverage** (Python 3.11+).
+All phases P0–P5 + extensions A/A2/B/C/D/E/F + ADR-007..018 + CI axis-gate delivered.
 
 ---
 
@@ -299,6 +299,10 @@ Decisions are recorded as ADRs:
   `kernel/events.py` (DomainEvent extends Event + EventStore append-only + CQRS
   Command/Query Bus), `DesktopAgent(BaseAgent)` event-driven, `DesktopVision`
   (OCR + element detection), `CapabilityExecutor.register_agent`.
+- [ADR-018 — Capability Handler Auto-Discovery](docs/adr/ADR-018-capability-autodiscovery.md) —
+  `kernel/discovery.py` + `CapabilityExecutor.autodiscover(instances)`: reflects
+  over loaded plugin/agent instances and wires their capabilities (no plugin
+  import, axis clean). Replaces manual bootstrap wiring.
 
 ---
 

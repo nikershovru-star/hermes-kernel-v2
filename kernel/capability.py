@@ -13,6 +13,7 @@ from typing import Optional
 
 from kernel.agent import BaseAgent
 from kernel.domain import Artifact, Capability, Task, Tool
+from kernel.discovery import discover_handlers
 from kernel.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
@@ -153,6 +154,17 @@ class CapabilityExecutor:
             return await agent.execute(agent.agent_id, task)
         return handler
 
+    def autodiscover(self, instances: list[Any]) -> int:
+        """Auto-wire capability handlers from already-loaded plugin/agent instances (ADR-018).
+
+        Replaces the manual ``register_agent`` / ``register_handler`` calls with
+        reflection: BaseAgent instances are wired via ``register_agent``; other
+        instances have their ``@sdk.tool``-marked methods registered by capability.
+        The kernel passes the instances it already loaded (no plugin import), so
+        the kernel -> plugins axis stays intact.
+        """
+        return discover_handlers(instances, self)
+
     async def execute(
         self,
         capability: str,
@@ -198,4 +210,4 @@ class CapabilityExecutor:
         return artifact
 
 
-__all__ = ["CapabilityRegistry", "CapabilityExecutor"]
+__all__ = ["CapabilityRegistry", "CapabilityExecutor", "discover_handlers"]

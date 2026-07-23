@@ -4,6 +4,31 @@ All notable changes to Hermes Kernel v2 are documented here. The format is
 loosely based on [Keep a Changelog](https://keepachangelog.com/); this project
 adheres to **semantic versioning** (MAJOR.MINOR.PATCH).
 
+## [v2.4.0] — 2026-07-23 · Capability Handler Auto-Discovery (ADR-018)
+
+### Added
+- **`kernel/discovery.py`** — `discover_handlers(instances, executor)`: post-load
+  reflection that wires capability handlers from already-loaded plugin/agent
+  instances (no plugin import, kernel→plugins axis preserved):
+  - `BaseAgent` instances -> `executor.register_agent` (Task-routing handler).
+  - Other instances -> methods marked with `@sdk.tool` become handlers keyed by
+    their declared `capability` (signature-adapted to
+    `handler(params, context)` via `inspect.signature`).
+- **`CapabilityExecutor.autodiscover(instances)`** (`kernel/capability.py`): thin
+  convenience wrapper over `discover_handlers`. Replaces the manual
+  `register_agent`/`register_handler` bootstrap lines deferred from ADR-017.
+- 6 tests (`tests/test_capability_discovery.py`): plugin `@sdk.tool` wiring, param
+  forwarding, BaseAgent wiring, mixed instances, idempotency.
+
+### Notes
+- `plugins.sdk.tool` is imported **lazily** inside `discover_handlers` to break an
+  import cycle (`plugins.sdk` package `__init__` imports `kernel.capability`).
+  Documented in ADR-018 so it isn't "tidied" back.
+- `get_tools` harvests class-level `@sdk.tool` markers only (instance-assigned
+  handlers are not discovered) — consistent with SDK usage.
+- Manual `register_agent` / `register_handler` remain available for explicit
+  overrides.
+
 ## [v2.3.0] — 2026-07-23 · Event Platform + Desktop Agent Vision (ADR-017)
 
 ### Added
@@ -169,6 +194,7 @@ green (228 passed, 3 skipped, ~87% coverage).
 ---
 
 [Unreleased]: #changelog
+[v2.4.0]: #v240--2026-07-23--capability-handler-auto-discovery-adr-018
 [v2.3.0]: #v230--2026-07-23--event-platform--desktop-agent-vision-adr-017
 [v2.2.1]: #v221--2026-07-23--agentplugin-unification-adr-016
 [v2.1.0]: #v210--2026-07-23--human-emulation-layer
