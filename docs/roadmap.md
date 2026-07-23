@@ -1,6 +1,6 @@
 # Hermes Kernel v2 — Roadmap
 
-_Last updated: 2026-07-23 · **189 passed, 3 skipped, ~92% total coverage**_
+_Last updated: 2026-07-23 · **209 passed, 3 skipped, ~92% total coverage**_
 
 | Phase | Название | Статус | Этапы | Gate |
 |-------|----------|--------|-------|------|
@@ -13,10 +13,11 @@ _Last updated: 2026-07-23 · **189 passed, 3 skipped, ~92% total coverage**_
 | A | SSE transport | ✅ | `mcp/server_sse.py` | 5 tests, 80% |
 | A2 | Streamable HTTP transport | ✅ | `mcp/server_streamable.py` | 7 tests, 82% |
 | B | KnowledgeRetrievalService | ✅ | `kernel/retrieval.py` | 4 tests, 96% |
-| C | Plugin SDK CLI | ✅ | `plugins/sdk/cli.py` (`hermes plugin`) | 3 tests |
+| C | Plugin SDK CLI | ✅ | `plugins/sdk/cli.py` (`hermes plugin` init/watch/**list/validate/disable**) | 16 tests |
 | D | ADR-007 Workspace Isolation | ✅ | `docs/adr/ADR-007-*.md` | spec |
 | ADR-008 | Streamable HTTP Transport | ✅ | `docs/adr/ADR-008-*.md` | spec |
 | ADR-009 | Retrieval Backends | ✅ | `kernel/retrieval_backends.py` | 17 tests, 68%* |
+| ADR-010 | Plugin CLI UX | ✅ | `plugins/sdk/validator.py` + `kernel/registry.PluginRegistry` | 13 tests, 84/87% |
 
 > \* `kernel/retrieval_backends.py` coverage is **68% on Windows** (sqlite-vss
 > has no Windows wheels → its 3 tests skip). On Linux with `faiss-cpu` +
@@ -73,12 +74,12 @@ without rewriting the registries.
   already-enforced workspace isolation contract (persistence, graph, retrieval,
   scanner, RBAC).
 
-## Current test surface (189 tests, 3 skipped)
+## Current test surface (209 tests, 3 skipped)
 
 | Suite | Tests | Suite | Tests |
 |-------|-------|-------|-------|
 | test_domain | 27 | test_registry | 9 |
-| test_loader_errors | 12 | test_mcp_transport | 9 |
+| test_plugin_registry | 13 | test_loader_errors | 12 |
 | test_bus | 8 | test_capability | 8 |
 | test_mcp | 8 | test_mcp_client | 8 |
 | test_executor | 6 | test_graph | 6 |
@@ -89,7 +90,7 @@ without rewriting the registries.
 | test_rbac | 4 | test_persistence | 6 |
 | test_integration | 3 | test_integration_p2 | 1 |
 | test_mcp_sse | 5 | test_retrieval_backends | 17 (+3 skip) |
-| test_sdk_cli | 3 | test_mcp_streamable | 7 |
+| test_sdk_cli | 16 | test_mcp_streamable | 7 |
 
 ## Module coverage snapshot
 
@@ -99,14 +100,14 @@ without rewriting the registries.
 | kernel/auth.py | 100% | kernel/workspace.py | 97% |
 | kernel/graph.py | 96% | kernel/scanner.py | 96% |
 | kernel/chunker.py | 94% | kernel/executor.py | 92% |
-| kernel/registry.py | 92% | kernel/bus.py | 90% |
+| kernel/registry.py | 84% | kernel/bus.py | 90% |
 | kernel/parser.py | 84% | kernel/embedder.py | 84% |
 | kernel/rbac.py | 81% | kernel/persistence.py | 82% |
 | mcp/tools.py | 97% | mcp/client.py | 81% |
 | mcp/server.py | 81% | mcp/server_sse.py | 80% |
 | mcp/server_streamable.py | 82% | plugins/loader.py | 97% |
-| plugins/sdk/cli.py | 64% | kernel/retrieval.py | ~88% |
-| kernel/retrieval_backends.py | 68%* | | |
+| plugins/sdk/cli.py | 84% | plugins/sdk/validator.py | 87% |
+| kernel/retrieval.py | ~88% | kernel/retrieval_backends.py | 68%* |
 
 > \* 68% on Windows (sqlite-vss unavailable → VSS branch skips); ~87% on Linux
 > with both `faiss-cpu` + `sqlite-vss` installed.
@@ -115,7 +116,6 @@ without rewriting the registries.
 
 - **MCP Streamable HTTP durable sessions**: `Last-Event-ID` replay + session
   persistence via `PersistenceRegistry` (currently in-memory only).
-- **Plugin CLI UX**: `hermes plugin list`, `validate`, `disable`.
 - **CI tach axis-gate** hardening (already in `pyproject.toml`; enforce in CI).
 
 See the [ADRs](adr/) for architectural decisions behind each phase.

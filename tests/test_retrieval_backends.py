@@ -63,14 +63,14 @@ async def test_persist_and_reload(svc) -> None:
 
 
 async def test_auto_index_on_graph_event(svc) -> None:
+    from kernel.domain import Event
+
     s, persistence, bus = svc
     await s.start()
     n = _node("nX", "ws1", [0.5, 0.5])
     await persistence.save(n)
     bus.publish(
-        __import__("kernel.domain", fromlist=["Event"]).Event(
-            type="graph.updated", source="graph", payload={"node_id": "nX"}
-        )
+        Event(type="graph.updated", source="graph", payload={"node_id": "nX"})
     )
     import asyncio
 

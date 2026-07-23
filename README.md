@@ -143,7 +143,15 @@ A `hermes` console script (installed via `[project.scripts]`):
 ```bash
 hermes plugin init myplugin     # scaffold myplugin.py + plugin.yaml
 hermes plugin watch ./plugins   # hot-reload changed modules (polling, no watchdog)
+hermes plugin list              # list loaded plugins (name, version, caps, status)
+hermes plugin validate ./myplugin   # static check: manifest + compile + (--strict) deps
+hermes plugin disable myplugin  # unload from sys.modules + emit plugin.disabled event
 ```
+
+The `list` / `disable` commands drive the kernel's own `PluginRegistry`
+(`kernel/registry.py`) — there is exactly one registry. `validate` runs the
+`PluginValidator` (manifest schema → `py_compile` → dependency resolution) with
+**no plugin execution**. See **ADR-010**.
 
 ---
 
@@ -160,7 +168,8 @@ python -m pytest tests/ -v
 python -m pytest tests/ --cov=kernel --cov=plugins --cov=mcp --cov-report=term-missing
 ```
 
-Expected: **174 passed**.
+Expected: **209 passed, 3 skipped** (sqlite-vss has no Windows wheels → 3
+retrieval-backend tests skip; they pass on Linux).
 
 > **Note:** always invoke pytest as `python -m pytest` so it resolves against the
 > active venv interpreter (a bare `pip`/`pytest` may bind to a different Python).
@@ -207,6 +216,8 @@ Decisions are recorded as ADRs:
   POST /mcp/v1/messages + GET /mcp/v1/events, `Mcp-Session-Id` header, batches.
 - [ADR-009 — Retrieval Backends](docs/adr/ADR-009-retrieval-backends.md) —
   Memory / Faiss / SQLite-VSS pluggable backends behind a stable API.
+- [ADR-010 — Plugin CLI UX](docs/adr/ADR-010-plugin-cli-ux.md) —
+  `list` / `validate` / `disable` driving the single `PluginRegistry`.
 
 ---
 
