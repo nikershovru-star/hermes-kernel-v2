@@ -538,6 +538,75 @@ class NodePartitioned(DomainEvent):
         )
 
 
+# --------------------------------------------------------------------------- #
+# Dynamic Planner events (ADR-024)
+# --------------------------------------------------------------------------- #
+class PlanCreated(DomainEvent):
+    """A dynamic plan was created for a workflow."""
+
+    def __init__(self, plan_id: str, workflow_id: str, step_count: int, version: int) -> None:
+        super().__init__(
+            type="planner.plan_created",
+            aggregate_id=plan_id,
+            payload={"plan_id": plan_id, "workflow_id": workflow_id, "step_count": step_count, "version": version},
+        )
+
+
+class StepPlanned(DomainEvent):
+    """A step was added to a plan."""
+
+    def __init__(self, plan_id: str, step_id: str, capability: str, agent_id: str | None, risk: str) -> None:
+        super().__init__(
+            type="planner.step_planned",
+            aggregate_id=plan_id,
+            payload={"plan_id": plan_id, "step_id": step_id, "capability": capability, "agent_id": agent_id, "risk": risk},
+        )
+
+
+class ReplanTriggered(DomainEvent):
+    """A replan was triggered by a failure / risk / swarm signal."""
+
+    def __init__(self, trigger_id: str, plan_id: str, reason: str, failed_step_id: str | None) -> None:
+        super().__init__(
+            type="planner.replan_triggered",
+            aggregate_id=plan_id,
+            payload={"trigger_id": trigger_id, "plan_id": plan_id, "reason": reason, "failed_step_id": failed_step_id},
+        )
+
+
+class PlanAdapted(DomainEvent):
+    """A plan was adapted (replanned) into a new version."""
+
+    def __init__(self, plan_id: str, old_version: int, new_version: int, changes_summary: str) -> None:
+        super().__init__(
+            type="planner.plan_adapted",
+            aggregate_id=plan_id,
+            payload={"plan_id": plan_id, "old_version": old_version, "new_version": new_version, "changes_summary": changes_summary},
+        )
+
+
+class StepExecuted(DomainEvent):
+    """A plan step finished execution."""
+
+    def __init__(self, plan_id: str, step_id: str, status: str, duration_ms: int, retry_count: int) -> None:
+        super().__init__(
+            type="planner.step_executed",
+            aggregate_id=plan_id,
+            payload={"plan_id": plan_id, "step_id": step_id, "status": status, "duration_ms": duration_ms, "retry_count": retry_count},
+        )
+
+
+class RiskEscalated(DomainEvent):
+    """A step's risk level was escalated by risk assessment."""
+
+    def __init__(self, plan_id: str, step_id: str, from_risk: str, to_risk: str, reason: str) -> None:
+        super().__init__(
+            type="planner.risk_escalated",
+            aggregate_id=plan_id,
+            payload={"plan_id": plan_id, "step_id": step_id, "from_risk": from_risk, "to_risk": to_risk, "reason": reason},
+        )
+
+
 __all__ = [
     "DomainEvent",
     "EventStore",
@@ -574,4 +643,10 @@ __all__ = [
     "TaskDelegated",
     "TaskCompleted",
     "NodePartitioned",
+    "PlanCreated",
+    "StepPlanned",
+    "ReplanTriggered",
+    "PlanAdapted",
+    "StepExecuted",
+    "RiskEscalated",
 ]

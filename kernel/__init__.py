@@ -4,8 +4,10 @@ Public surface for the orchestration/distributed-health layer added in
 ADR-023 (Swarm / Teams).
 """
 
-from kernel.domain import Swarm, SwarmMember
+from kernel.domain import ExecutionOutcome, Plan, PlanStep, ReplanTrigger, Swarm, SwarmMember
 from kernel.distributed_health import DistributedHealthMonitor
+from kernel.dynamic_planner import DynamicPlanner
+from kernel.plan_store import PlanStore
 from kernel.swarm import SwarmCoordinator
 from kernel.team_manager import TeamManager
 
@@ -15,4 +17,10 @@ __all__ = [
     "DistributedHealthMonitor",
     "Swarm",
     "SwarmMember",
+    "DynamicPlanner",
+    "Plan",
+    "PlanStep",
+    "ExecutionOutcome",
+    "ReplanTrigger",
+    "PlanStore",
 ]

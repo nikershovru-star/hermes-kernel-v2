@@ -3,7 +3,7 @@
 > An async-first, event-driven **AI Operating System** kernel — Clean
 > Architecture, plugin-extensible, MCP-native.
 
-**Status:** v2.9.0 · **461 passed, 3 skipped, 91% coverage** (Python 3.11+).
+**Status:** v2.10.0 · **504 passed, 3 skipped, 91% coverage** (Python 3.11+).
 All phases P0–P5 + extensions A/A2/B/C/D/E/F + ADR-007..023 + CI axis-gate delivered.
 
 ---
@@ -332,6 +332,12 @@ Decisions are recorded as ADRs:
   `kernel/swarm_store.py` (`SwarmStore` in-memory + SQLite); 8 swarm events;
   optional backward-compatible integration into `AgentRuntime`/
   `WorkflowEngine`/`CapabilityExecutor`. 49 tests.
+- [ADR-024 — Dynamic Planner](docs/adr/ADR-024-dynamic-planner.md) — adaptive
+  replanning + risk-aware execution: `kernel/dynamic_planner.py`
+  (`DynamicPlanner`: DAG toposort, retry w/ exponential backoff, rule-based
+  replan for 5 triggers + optional LLM shim, `risk_assess`), `kernel/plan_store.py`
+  (`PlanStore` in-memory + SQLite), 6 planner events, `WorkflowEngine.execute_adaptive`
+  + `SwarmCoordinator.rebalance_load`. 39 tests.
 
 ---
 

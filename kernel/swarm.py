@@ -32,8 +32,12 @@ from kernel.events import (
     HeartbeatReceived,
     LeaderElected,
     NodePartitioned,
+    ReplanTriggered,
     TaskCompleted,
     TaskDelegated,
+)
+from kernel.domain import (
+    ReplanTrigger,
 )
 from kernel.swarm_store import SwarmStore
 
@@ -253,6 +257,32 @@ class SwarmCoordinator:
                     await self._publish(HeartbeatMissed(m.node_id, agent_id, missed, "suspected"))
                     self._persist_swarm(swarm)
         return partitioned
+
+    # -- load rebalancing (ADR-024) -------------------------------------- #
+    def rebalance_load(self, swarm_id: str) -> ReplanTrigger | None:
+        swarm = self._store.get(swarm_id)
+        if swarm is None:
+            raise KeyError(f"swarm '{swarm_id}' not found")
+        healthy = [m for m in swarm.members.values() if m.health in ("healthy", "suspected")]
+        if len(healthy) < 2:
+            return None
+        loads = [self._load.get(m.agent_id, 0.0) for m in healthy]
+        mean = sum(loads) / len(loads)
+        variance = sum((x - mean) ** 2 for x in loads) / len(loads)
+        if variance <= 0.5:
+            return None
+        # highest-load agent -> lowest-load agent
+        hi = max(healthy, key=lambda m: self._load.get(m.agent_id, 0.0))
+        lo = min(healthy, key=lambda m: self._load.get(m.agent_id, 0.0))
+        if hi.agent_id == lo.agent_id:
+            return None
+        trigger = ReplanTrigger(
+            trigger_id=uuid.uuid4().hex,
+            plan_id=swarm_id,
+            reason="swarm_rebalance",
+            context={"from_agent": hi.agent_id, "to_agent": lo.agent_id},
+        )
+        return trigger
 
     # -- delegation ------------------------------------------------------- #
     def delegate_task(self, swarm_id: str, task: Task, from_agent: str) -> TaskDelegation:

@@ -553,6 +553,62 @@ class ActionLog(BaseEntity):
     error: Optional[str] = None
 
 
+# --------------------------------------------------------------------------- #
+# Dynamic Planner (ADR-024) — adaptive replanning + risk-aware execution
+# --------------------------------------------------------------------------- #
+class PlanStatus(str, Enum):
+    DRAFT = "draft"
+    ACTIVE = "active"
+    FAILED = "failed"
+    COMPLETED = "completed"
+    ADAPTED = "adapted"
+
+
+class RiskLevel(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class PlanStep(BaseModel):
+    step_id: str
+    capability: str
+    agent_id: str | None = None
+    dependencies: list[str] = Field(default_factory=list)
+    estimated_duration_ms: int = 1000
+    risk: RiskLevel = RiskLevel.LOW
+    retry_budget: int = 3
+
+
+class Plan(BaseModel):
+    plan_id: str
+    workflow_id: str
+    status: PlanStatus
+    steps: list[PlanStep] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    version: int = 1
+
+
+class ExecutionOutcome(BaseModel):
+    outcome_id: str
+    plan_id: str
+    step_id: str
+    status: str  # "success" | "failure" | "timeout" | "cancelled"
+    duration_ms: int
+    error_type: str | None = None
+    retry_count: int = 0
+
+
+class ReplanTrigger(BaseModel):
+    trigger_id: str
+    plan_id: str
+    reason: str  # "step_failed" | "capability_missing" | "agent_unhealthy" | "risk_escalation" | "swarm_rebalance"
+    context: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
 # Convenience registry for tests / loaders
 ENTITY_TYPES = {
     "Document": Document,

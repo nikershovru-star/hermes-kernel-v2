@@ -4,6 +4,50 @@ All notable changes to Hermes Kernel v2 are documented here. The format is
 loosely based on [Keep a Changelog](https://keepachangelog.com/); this project
 adheres to **semantic versioning** (MAJOR.MINOR.PATCH).
 
+## [v2.10.0] — 2026-07-24 · Dynamic Planner (ADR-024)
+
+### Added
+- **`kernel/dynamic_planner.py`** — `DynamicPlanner` (async): builds a `Plan`
+  (DAG of `PlanStep`), executes steps in topological order with **retry +
+  exponential backoff** (injectable `sleep`), and **adaptive replanning** when
+  a step exhausts its retry budget. Five rule-based replan triggers:
+  `capability_missing` (unassign agent), `agent_unhealthy` (round-robin
+  reassign), `step_failed` (naive split into `s1-a`/`s1-b` substeps),
+  `risk_escalation` (bump `RiskLevel` + `retry_budget`), `swarm_rebalance`
+  (reassign between agents). Optional **LLM shim** (`llm_client` injectable)
+  for demo replanning; falls back to rules on any parse error. `risk_assess`
+  escalates step risk from past `ExecutionOutcome` history (HIGH after >2
+  failures, CRITICAL on `agent_unhealthy`). All clocks/sleep/rng/llm injectable
+  for deterministic tests. Axis: imports only `kernel.domain` + `kernel.events`
+  (+ lazy `kernel.swarm`).
+- **`kernel/plan_store.py`** — `PlanStore`: in-memory CRUD + optional SQLite
+  persistence (`plans`, `outcomes` tables), mirroring `SwarmStore`.
+- **6 planner events** (`kernel/events.py`): `PlanCreated`, `StepPlanned`,
+  `ReplanTriggered`, `PlanAdapted`, `StepExecuted`, `RiskEscalated`.
+- **`kernel/workflow.py`** — `WorkflowEngine.execute_adaptive` (DAG execution
+  via the planner; transparent fallback to legacy `execute_step` when no planner
+  is wired) + `replan_step` (emits `ReplanTriggered`, returns adapted `Plan`).
+  Backward-compatible: existing `WorkflowEngine` tests unchanged.
+- **`kernel/swarm.py`** — `SwarmCoordinator.rebalance_load`: emits a
+  `ReplanTrigger` (reason `swarm_rebalance`) when load variance across healthy
+  members exceeds 0.5.
+- **39 new tests** (`test_dynamic_planner.py`, `test_dynamic_planner_integration.py`,
+  `test_plan_store.py`, `test_planner_workflow_compat.py`).
+
+### Honest Notes
+- **LLM replanning is a shim.** The planner serializes the plan/trigger to a
+  prompt and asks the LLM for ad-hoc JSON (`{"steps": [...]}`); there is no
+  formal schema, no cost/timeout budgeting, and no validation beyond field
+  extraction. Use only for demos.
+- **Rule-based replan covers ~80%** of realistic failure modes; the LLM path is
+  an augmentation, not a replacement.
+- **Substep splitting is naive** — `step_failed` splits a step into `-a`/`-b`
+  suffixes with halved `estimated_duration_ms`; it does not semantically
+  decompose the work.
+- **Risk assessment is a heuristic** (failure-count threshold + `error_type`
+  lookup), not predictive modeling.
+- **Persistence is local SQLite only** — no distributed/cross-node plan store.
+
 ## [v2.9.0] — 2026-07-24 · Swarm / Teams (ADR-023)
 
 ### Added

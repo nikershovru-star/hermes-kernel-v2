@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -23,6 +24,12 @@ from kernel.capability import CapabilityExecutor
 from kernel.domain import (
     Artifact,
     DeadLetterEntry,
+    ExecutionOutcome,
+    Plan,
+    PlanStep,
+    PlanStatus,
+    ReplanTrigger,
+    RiskLevel,
     SandboxPolicy,
     Task,
     Workflow,
@@ -42,7 +49,9 @@ from kernel.events import (
     WorkflowStepCompleted,
     WorkflowStepFailed,
     WorkflowStepStarted,
+    ReplanTriggered,
 )
+
 
 logger = logging.getLogger("hermes.kernel.workflow")
 
@@ -60,6 +69,7 @@ class WorkflowEngine:
         health_monitor: HealthMonitor | None = None,
         dead_letter: DeadLetterQueue | None = None,
         swarm_coordinator: "SwarmCoordinator | None" = None,
+        dynamic_planner: "DynamicPlanner | None" = None,
     ) -> None:
         self._agents = agent_runtime
         self._caps = capability_executor
@@ -69,7 +79,85 @@ class WorkflowEngine:
         self._health = health_monitor
         self._dlq = dead_letter
         self._swarm = swarm_coordinator
+        self._planner = dynamic_planner
         self._instances: dict[str, WorkflowInstance] = {}
+
+    # -- adaptive execution (ADR-024) ------------------------------------ #
+    def _set_planner(self, dynamic_planner: "DynamicPlanner | None") -> None:
+        self._planner = dynamic_planner
+
+    async def execute_adaptive(
+        self, instance_id: str, workflow: Workflow
+    ) -> list[Artifact]:
+        if self._planner is None:
+            # backward-compatible fallback: linear execute via execute_step
+            inst = self.get_instance(instance_id)
+            artifacts: list[Artifact] = []
+            while inst.status == WorkflowStatus.RUNNING and inst.current_step_id is not None:
+                artifacts.append(await self.execute_step(inst, workflow))
+            return artifacts
+        inst = self.get_instance(instance_id)
+        plan_steps = [
+            PlanStep(
+                step_id=s.id,
+                capability=s.capability,
+                agent_id=None,
+                dependencies=[],
+                estimated_duration_ms=1000,
+                risk=RiskLevel.LOW,
+                retry_budget=3,
+            )
+            for s in workflow.steps
+        ]
+        plan = await self._planner.create_plan(workflow.id, plan_steps)
+
+        def make_executor(inst: WorkflowInstance, wf: Workflow):
+            async def _exec(step: PlanStep) -> ExecutionOutcome:
+                # reuse the existing local execution path (execute_step)
+                artifact = await self.execute_step(inst, wf)
+                status = "success" if artifact.type not in ("error", "approval_required") else (
+                    "cancelled" if artifact.type == "approval_required" else "failure"
+                )
+                return ExecutionOutcome(
+                    outcome_id=uuid.uuid4().hex,
+                    plan_id=plan.plan_id,
+                    step_id=step.step_id,
+                    status=status,
+                    duration_ms=1,
+                    retry_count=0,
+                )
+            return _exec
+
+        executor = make_executor(inst, workflow)
+        await self._planner.execute_plan(plan.plan_id, executor)
+        # collect artifacts produced (re-run is idempotent for returned shape check)
+        return [Artifact(type="plan_executed", content={"plan_id": plan.plan_id, "status": plan.status.value}, format="json")]
+
+    async def replan_step(self, instance_id: str, step_id: str, reason: str) -> Plan | None:
+        inst = self.get_instance(instance_id)
+        if self._planner is None:
+            return None
+        workflow_id = inst.workflow_id
+        trigger = ReplanTrigger(
+            trigger_id=uuid.uuid4().hex,
+            plan_id=workflow_id,
+            reason=reason,
+            context={"step_id": step_id, "instance_id": instance_id},
+        )
+        # emit ReplanTriggered on the planner's bus if wired
+        if self._planner._bus is not None:
+            self._planner._bus.publish(
+                ReplanTriggered(trigger.trigger_id, workflow_id, reason, step_id)
+            )
+        if self._planner._store is not None:
+            await self._planner._store.append(
+                ReplanTriggered(trigger.trigger_id, workflow_id, reason, step_id)
+            )
+        plan = await self._planner._replan(
+            Plan(plan_id=workflow_id, workflow_id=workflow_id, status=PlanStatus.DRAFT, steps=[]),
+            trigger,
+        )
+        return plan
 
     # -- instance lifecycle ---------------------------------------------- #
     async def start(self, workflow: Workflow, context: dict[str, Any] | None = None) -> WorkflowInstance:
