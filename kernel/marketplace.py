@@ -28,6 +28,7 @@ from kernel.marketplace_domain import (
     PluginSource,
     PluginStatus,
 )
+from kernel.security_domain import Permission  # ADR-028: validate policy actions
 
 logger = logging.getLogger("hermes.kernel.marketplace")
 
@@ -50,6 +51,7 @@ class PluginMarketplace:
         rng: random.Random | None = None,
         http_client: Any | None = None,
         sleep: Callable[..., Awaitable[None]] = asyncio.sleep,
+        guard: Any | None = None,
     ) -> None:
         self._bus = event_bus
         self._event_store = event_store
@@ -59,6 +61,7 @@ class PluginMarketplace:
         self._rng = rng or random.Random()
         self._http = http_client
         self._sleep = sleep
+        self._guard = guard  # ADR-028: optional CapabilityGuard
         # in-memory caches (mirror store when no persistence)
         self._installed: dict[str, PluginPackage] = {}
         self._catalog: dict[str, CatalogEntry] = {}
@@ -112,12 +115,26 @@ class PluginMarketplace:
         return entries
 
     # -- validation ------------------------------------------------------ #
+    # Allow-list of recognised permission actions. A package policy must only
+    # declare actions from this set (basic validation, not full PKI — see ADR-028).
+    _ALLOWED_ACTIONS = frozenset({
+        "execute", "discover", "network", "file.read", "file.write",
+        "subprocess", "memory", "cpu",
+    })
+
     def validate_package(self, package: PluginPackage) -> tuple[bool, str]:
-        """Validate checksum (if present) and declared dependencies.
+        """Validate checksum (if present), declared dependencies, and policy actions.
 
         Returns ``(ok, reason)``. A present checksum must match the SHA-256 of
-        ``entrypoint``. Dependencies must be installed or available.
+        ``entrypoint``. Dependencies must be installed or available. If a
+        ``policy`` is declared, every permission ``action`` must be in the
+        allow-list (a guard against arbitrary-code pseudo-permissions).
         """
+        if package.policy is not None:
+            bad = [p.action for p in package.policy.permissions
+                   if p.action not in self._ALLOWED_ACTIONS]
+            if bad:
+                return False, f"disallowed policy actions: {sorted(set(bad))}"
         if package.checksum:
             digest = hashlib.sha256(package.entrypoint.encode("utf-8")).hexdigest()
             if digest != package.checksum:
@@ -142,6 +159,9 @@ class PluginMarketplace:
             if self._store is not None:
                 self._store.put_package(package)
             return package
+        # ADR-028: register the package's sandbox policy with the guard (optional).
+        if self._guard is not None and package.policy is not None:
+            await self._guard.register_policy(package.package_id, package.policy)
         package.status = PluginStatus.INSTALLING
         await self._sleep(0)
         package.status = PluginStatus.INSTALLED

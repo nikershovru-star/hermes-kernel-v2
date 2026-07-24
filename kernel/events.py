@@ -777,6 +777,58 @@ class LogEntryEmitted(DomainEvent):
         )
 
 
+# -- security (ADR-028) ----------------------------------------------- #
+class PermissionDenied(DomainEvent):
+    """A guarded action was refused by ``CapabilityGuard`` (no matching permission)."""
+
+    def __init__(self, principal: str, action: str, resource: str) -> None:
+        super().__init__(
+            type="sec.permission_denied",
+            aggregate_id=principal,
+            payload={"principal": principal, "action": action, "resource": resource},
+        )
+
+
+class ResourceLimitExceeded(DomainEvent):
+    """A cooperative resource limit (calls / cpu_ms) was breached by a package."""
+
+    def __init__(self, principal: str, limit_type: str, value: float) -> None:
+        super().__init__(
+            type="sec.resource_limit_exceeded",
+            aggregate_id=principal,
+            payload={"principal": principal, "limit_type": limit_type, "value": value},
+        )
+
+
+class PluginSandboxed(DomainEvent):
+    """A package's sandbox policy was registered with the guard."""
+
+    def __init__(self, package_id: str, policy_summary: str) -> None:
+        super().__init__(
+            type="sec.plugin_sandboxed",
+            aggregate_id=package_id,
+            payload={"package_id": package_id, "policy_summary": policy_summary},
+        )
+
+
+class AuditLogEntry(DomainEvent):
+    """An audit entry was written by ``CapabilityGuard``."""
+
+    def __init__(self, entry_id: str, who: str, action: str, resource: str, result: str, timestamp: str) -> None:
+        super().__init__(
+            type="sec.audit_entry",
+            aggregate_id=who,
+            payload={
+                "entry_id": entry_id,
+                "who": who,
+                "action": action,
+                "resource": resource,
+                "result": result,
+                "timestamp": timestamp,
+            },
+        )
+
+
 __all__ = [
     "DomainEvent",
     "EventStore",
@@ -834,4 +886,8 @@ __all__ = [
     "TraceSpanStarted",
     "TraceSpanFinished",
     "LogEntryEmitted",
+    "PermissionDenied",
+    "ResourceLimitExceeded",
+    "PluginSandboxed",
+    "AuditLogEntry",
 ]

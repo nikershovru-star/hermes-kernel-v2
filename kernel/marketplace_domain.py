@@ -17,6 +17,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+# ADR-028: optional sandbox policy model (leaf module — no dependency cycle).
+from kernel.security_domain import SandboxPolicy
+
 
 class PluginSource(str, Enum):
     """Where a plugin package originates."""
@@ -53,6 +56,10 @@ class PluginPackage(BaseModel):
     status: PluginStatus = PluginStatus.AVAILABLE
     installed_at: datetime | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    # ADR-028: optional permission-based sandbox policy carried by the package.
+    # Absence => no guard registered (zero regression; guard treats unknown
+    # package as allowed when unwired).
+    policy: "SandboxPolicy | None" = None
 
 
 class CatalogEntry(BaseModel):

@@ -19,6 +19,7 @@ from kernel.domain import Agent, Artifact, HealthCheck, SandboxPolicy, Task
 from kernel.events import DomainEvent, EventBus, EventStore
 from kernel.health import HealthMonitor
 from kernel.sandbox import Sandbox
+from kernel.capability_guard import CapabilityGuard  # ADR-028 (type only)
 
 logger = logging.getLogger("hermes.kernel.agent")
 
@@ -89,6 +90,7 @@ class AgentRuntime:
         knowledge_graph: "KnowledgeGraphEngine | None" = None,
         marketplace: "PluginMarketplace | None" = None,
         observability: "ObservabilityEngine | None" = None,
+        guard: "CapabilityGuard | None" = None,
     ) -> None:
         self._agents: dict[str, BaseAgent] = {}
         self._bus = bus
@@ -99,6 +101,7 @@ class AgentRuntime:
         self._kg = knowledge_graph
         self._mp = marketplace
         self._obs = observability
+        self._guard = guard  # ADR-028: optional CapabilityGuard
         self._swarm_ids: dict[str, str] = {}  # agent_id -> swarm_id
         self._default_graphs: dict[str, str] = {}  # agent_id -> graph_id
 
@@ -203,6 +206,21 @@ class AgentRuntime:
             span_id = await self._obs.start_span(corr, "agent.execute", correlation_id=corr)
             await self._obs.log("debug", f"agent execute: {agent_id} cap={task.capability}", correlation_id=corr, context={"capability": task.capability})
         try:
+            if self._guard is not None and task.capability and self._mp is not None:
+                # Resolve which installed package provides this capability, then
+                # cooperatively guard the call (deny/limit -> PermissionDeniedError).
+                pkg_id = self._capability_package_id(task.capability)
+                if pkg_id is not None:
+                    async with self._guard.wrap(
+                        lambda: agent.execute(agent_id, task),
+                        pkg_id,
+                        action="execute",
+                        resource=f"capability:{task.capability}",
+                    ) as coro:
+                        result = await coro
+                    if self._obs is not None:
+                        await self._obs.record_metric("agent.executions", 1.0, labels={"agent_id": agent_id, "capability": task.capability or ""})
+                    return result
             if self._sandbox is None:
                 result = await agent.execute(agent_id, task)
             else:
@@ -372,7 +390,27 @@ class AgentRuntime:
         if self._obs is not None:
             await self._obs.log("info", f"capability installed: {package_id}", correlation_id=agent_id, context={"capabilities": installed.capabilities})
             await self._obs.record_metric("agent.capability_installs", 1.0, labels={"agent_id": agent_id})
+        # ADR-028: register the installed package's sandbox policy with the guard.
+        if self._guard is not None and installed.policy is not None:
+            await self._guard.register_policy(installed.package_id, installed.policy)
         return installed
+
+    def _capability_package_id(self, capability: str) -> "str | None":
+        """Resolve which installed plugin package provides ``capability``.
+
+        Returns the package_id, or None when the capability maps to a built-in /
+        non-plugin capability (no guard needed). Matches by exact capability name
+        or the ``namespace.*`` prefix (e.g. ``weather.fetch`` -> package that
+        declares ``weather.fetch`` or ``weather``).
+        """
+        if self._mp is None:
+            return None
+        installed = self._mp.list_installed()
+        for pkg in installed:
+            for cap in pkg.capabilities:
+                if cap == capability or capability.startswith(cap + "."):
+                    return pkg.package_id
+        return None
 
     def get_health(self) -> dict:
         """Proxy the observability health snapshot (or empty dict if unwired)."""

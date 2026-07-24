@@ -221,6 +221,7 @@ class WorkflowInstance(BaseEntity):
     step_results: dict[str, Any] = Field(default_factory=dict)  # step_id -> artifact id/content
     step_attempts: dict[str, int] = Field(default_factory=dict)
     event_log: list[str] = Field(default_factory=list)  # DomainEvent ids
+    context: dict[str, Any] = Field(default_factory=dict)  # runtime decision context (ADR-028)
     started_at: datetime | None = None
     completed_at: datetime | None = None
 

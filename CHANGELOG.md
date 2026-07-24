@@ -4,6 +4,37 @@ All notable changes to Hermes Kernel v2 are documented here. The format is
 loosely based on [Keep a Changelog](https://keepachangelog.com/); this project
 adheres to **semantic versioning** (MAJOR.MINOR.PATCH).
 
+## [v2.14.0] — 2026-07-25 · Capability Guard (ADR-028)
+
+### Added
+- **`kernel/security_domain.py`** — permission-based sandbox models, isolated
+  from `kernel.domain.SandboxPolicy` (ADR-020): `Permission`, `ResourceLimit`,
+  `SandboxPolicy` (permissions + soft resource limits), `AuditEntry`.
+- **`kernel/security_store.py`** — `SecurityStore`: in-memory CRUD + optional
+  SQLite (`policies` / `grants` / `audit` tables), repo-reload on `db_path`.
+  Mirrors `PlanStore` / `GraphStore` / `MarketplaceStore` / `ObservabilityStore`.
+- **`kernel/capability_guard.py`** — `CapabilityGuard` (ADR-028): cooperative,
+  in-process permission sandbox for installed plugin packages. `register_policy`,
+  `grant`, `check`, `wrap` (async context manager), `call`; injectable clock /
+  event_bus / event_store / store / sleep. Publishes `sec.permission_denied`,
+  `sec.resource_limit_exceeded`, `sec.plugin_sandboxed`, `sec.audit_entry`.
+- **Wiring (axis-clean, optional):** `PluginMarketplace(guard=)` registers a
+  package's policy on install (after allow-list validation); `AgentRuntime`
+  `(marketplace=, guard=)` wraps `execute` + `install_capability`; `WorkflowEngine
+  (guard=)` wraps `execute_step` and converts denial/limit into a clean error
+  Artifact, setting the instance to `FAILED` (fixed an infinite-loop bug where
+  denial left `status=RUNNING`).
+- **`WorkflowInstance.context`** (backward compatible) — carries runtime decision
+  context (e.g. `permission_denied` list) for auditability.
+- **46 new tests** (`test_capability_guard.py`, `test_security_store.py`,
+  `test_security_integration.py`); total **649 passed, 3 skipped, 91% coverage**.
+
+### Honest Notes
+- Cooperative / soft limits only — NOT OS-level seccomp / cgroup / WASM
+  isolation. A package that ignores `guard.wrap` is not constrained.
+- Audit log is a ring buffer + SQLite, not a WORM store. Policy "signature" is
+  an allow-list, not full PKI.
+
 ## [v2.13.0] — 2026-07-24 · Observability / Metrics (ADR-027)
 
 ### Added

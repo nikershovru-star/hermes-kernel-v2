@@ -19,8 +19,13 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from kernel.agent import Agent, AgentRuntime
-from kernel.capability import CapabilityExecutor
+from kernel.agent import BaseAgent
+from kernel.capability import Capability, CapabilityExecutor
+from kernel.capability_guard import (  # ADR-028 (type only)
+    CapabilityGuard,
+    PermissionDeniedError,
+    ResourceLimitExceededError,
+)
 from kernel.domain import (
     Artifact,
     DeadLetterEntry,
@@ -73,6 +78,7 @@ class WorkflowEngine:
         knowledge_graph: "KnowledgeGraphEngine | None" = None,
         marketplace: "PluginMarketplace | None" = None,
         observability: "ObservabilityEngine | None" = None,
+        guard: "CapabilityGuard | None" = None,
     ) -> None:
         self._agents = agent_runtime
         self._caps = capability_executor
@@ -86,6 +92,7 @@ class WorkflowEngine:
         self._kg = knowledge_graph
         self._mp = marketplace
         self._obs = observability
+        self._guard = guard  # ADR-028: optional CapabilityGuard
         self._instances: dict[str, WorkflowInstance] = {}
 
     # -- adaptive execution (ADR-024) ------------------------------------ #
@@ -253,7 +260,25 @@ class WorkflowEngine:
             if any(q in cap.lower() for cap in pkg.capabilities):
                 seen.add(pkg.package_id)
                 matched.append(pkg)
+        # ADR-028: when a guard is wired, drop packages the caller is not
+        # permitted to discover (check(agent_id="discover" path via caller).
+        if self._guard is not None:
+            filtered = [p for p in matched if self._guard.check(p.package_id, "discover", f"plugin:{p.package_id}")]
+            matched = filtered
         return matched
+
+    def _step_package_id(self, capability: str) -> "str | None":
+        """Resolve which installed plugin package backs ``capability`` (ADR-028).
+
+        Returns package_id, or None for built-in / non-plugin capabilities.
+        """
+        if self._mp is None:
+            return None
+        for pkg in self._mp.list_installed():
+            for cap in pkg.capabilities:
+                if cap == capability or capability.startswith(cap + "."):
+                    return pkg.package_id
+        return None
 
     # -- instance lifecycle ---------------------------------------------- #
     async def start(self, workflow: Workflow, context: dict[str, Any] | None = None) -> WorkflowInstance:
@@ -344,15 +369,32 @@ class WorkflowEngine:
         await self._emit(WorkflowStepStarted(instance.id, step.id, step.capability))
         params = self._resolve_inputs(step, instance, workflow)
 
+        # ADR-028: cooperatively guard plugin-backed capabilities. The step
+        # runner is wrapped so denials / resource breaches raise INSIDE the
+        # guard (full audit trail). We convert them to a clean error artifact
+        # and FAIL the workflow instead of crashing the engine. The prior
+        # pre-check left status=RUNNING on denial, which made the linear
+        # fallback (no planner) loop forever — honest fix.
+        guarded_pkg: str | None = None
+        if self._guard is not None and step.capability:
+            guarded_pkg = self._step_package_id(step.capability)
+
         try:
             started = time.monotonic()
-            coro = self._run_step(step, params, agent, instance)
-            if self._sandbox is None:
-                artifact = await coro
+            if guarded_pkg is not None:
+                async with self._guard.wrap(
+                    lambda: self._run_step(step, params, agent, instance),
+                    guarded_pkg,
+                    action="execute",
+                    resource=f"capability:{step.capability}",
+                ) as coro:
+                    artifact = await coro
+            elif self._sandbox is None:
+                artifact = await self._run_step(step, params, agent, instance)
             else:
                 policy = policy or self._resolve_policy(step, workflow)
                 artifact = await self._sandbox.run(
-                    coro,
+                    self._run_step(step, params, agent, instance),
                     policy=policy,
                     cleanup=lambda: self._compensate_on_breach(instance, workflow),
                     context={"workflow_id": instance.id, "step_id": step.id},
@@ -369,6 +411,18 @@ class WorkflowEngine:
                 instance.status = WorkflowStatus.COMPLETED
                 instance.completed_at = datetime.now(timezone.utc)
             return artifact
+        except (PermissionDeniedError, ResourceLimitExceededError) as denied:
+            instance.context.setdefault("permission_denied", []).append(
+                {"step_id": step.id, "capability": step.capability, "package_id": guarded_pkg}
+            )
+            instance.status = WorkflowStatus.FAILED
+            await self._emit(WorkflowStepFailed(instance.id, step.id, f"guard denied: {step.capability}", attempt=1, will_retry=False))
+            return Artifact(
+                type="error",
+                content={"reason": "permission_denied", "capability": step.capability, "package_id": guarded_pkg},
+                format="json",
+                source=f"guard:{guarded_pkg}",
+            )
         except SandboxError:
             # sandbox breach is fatal for the step — propagate (cleanup already ran)
             raise
