@@ -52,6 +52,7 @@ class PluginMarketplace:
         http_client: Any | None = None,
         sleep: Callable[..., Awaitable[None]] = asyncio.sleep,
         guard: Any | None = None,
+        mcp: Any | None = None,
     ) -> None:
         self._bus = event_bus
         self._event_store = event_store
@@ -62,10 +63,12 @@ class PluginMarketplace:
         self._http = http_client
         self._sleep = sleep
         self._guard = guard  # ADR-028: optional CapabilityGuard
+        self._mcp = mcp  # ADR-029: optional McpGateway
         # in-memory caches (mirror store when no persistence)
         self._installed: dict[str, PluginPackage] = {}
         self._catalog: dict[str, CatalogEntry] = {}
         self._available: dict[str, PluginPackage] = {}
+        self._mcp_packages: dict[str, PluginPackage] = {}  # ADR-029: virtual MCP-tool packages
 
     # -- discovery ------------------------------------------------------- #
     async def discover(self, source_url: str) -> list[CatalogEntry]:
@@ -195,8 +198,57 @@ class PluginMarketplace:
 
     def list_available(self) -> list[PluginPackage]:
         if self._store is not None:
-            return self._store.list_catalog_packages()
-        return list(self._available.values())
+            packages = self._store.list_catalog_packages()
+        else:
+            packages = list(self._available.values())
+        # ADR-029: augment with virtual packages for discovered MCP tools.
+        if self._mcp is not None and self._mcp_packages:
+            packages = packages + list(self._mcp_packages.values())
+        return packages
+
+    # -- MCP discovery (ADR-029) ------------------------------------------ #
+    async def discover_mcp_tools(self, source_url: str) -> list[Any]:
+        """Connect to an MCP server + list its tools as catalog entries.
+
+        Requires a wired ``McpGateway``. Each discovered tool becomes a
+        ``CatalogEntry`` (source=MCP_SERVER) + a virtual ``PluginPackage``
+        exposing the ``mcp:<server_url>::<tool>`` capability.
+        """
+        if self._mcp is None:
+            raise RuntimeError("MCP gateway not wired")
+        await self._mcp.connect(source_url)
+        tools = await self._mcp.list_tools(source_url)
+        for tool in tools:
+            package_id = f"mcp:{source_url}::{tool.name}"
+            pkg = PluginPackage(
+                package_id=package_id,
+                name=tool.name,
+                version="0.0.0",
+                source=PluginSource.MCP_SERVER,
+                entrypoint=package_id,
+                capabilities=[package_id],
+                metadata={"description": tool.description, "input_schema": tool.input_schema},
+                status=PluginStatus.AVAILABLE,
+                created_at=self._clock(),
+            )
+            self._mcp_packages[package_id] = pkg
+            entry = CatalogEntry(
+                entry_id=uuid.uuid4().hex,
+                package_id=package_id,
+                source_url=source_url,
+                last_synced=self._clock(),
+            )
+            self._catalog[entry.entry_id] = entry
+            if self._store is not None:
+                try:
+                    self._store.put_catalog_entry(entry)
+                except Exception:  # noqa: BLE001 - store schema may not persist MCP entries
+                    pass
+            await self._emit(
+                PluginDiscovered(package_id, tool.name, PluginSource.MCP_SERVER.value, "0.0.0", source_url)
+            )
+        return tools
+
 
     # -- local registration --------------------------------------------- #
     async def register_local(self, entrypoint: str, capabilities: list[str], name: str | None = None) -> PluginPackage:

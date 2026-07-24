@@ -28,6 +28,7 @@ class PluginSource(str, Enum):
     REMOTE = "remote"
     MARKETPLACE = "marketplace"
     BUILTIN = "builtin"
+    MCP_SERVER = "mcp_server"  # ADR-029: tool discovered on a remote MCP server
 
 
 class PluginStatus(str, Enum):

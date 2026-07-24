@@ -91,6 +91,7 @@ class AgentRuntime:
         marketplace: "PluginMarketplace | None" = None,
         observability: "ObservabilityEngine | None" = None,
         guard: "CapabilityGuard | None" = None,
+        mcp: "McpGateway | None" = None,
     ) -> None:
         self._agents: dict[str, BaseAgent] = {}
         self._bus = bus
@@ -102,6 +103,7 @@ class AgentRuntime:
         self._mp = marketplace
         self._obs = observability
         self._guard = guard  # ADR-028: optional CapabilityGuard
+        self._mcp = mcp  # ADR-029: optional McpGateway
         self._swarm_ids: dict[str, str] = {}  # agent_id -> swarm_id
         self._default_graphs: dict[str, str] = {}  # agent_id -> graph_id
 
@@ -173,6 +175,14 @@ class AgentRuntime:
         agent = self._agents.get(agent_id)
         if agent is None:
             raise KeyError(f"agent '{agent_id}' is not running")
+        # ADR-029: MCP-backed capability ("mcp:<server_url>::<tool>" or
+        # "mcp:<tool>" resolved via the gateway's cached tool map). Deterministic
+        # contract: if the capability is namespaced "mcp:" and no gateway is
+        # wired, raise — never silently fall back to a local handler.
+        if task.capability is not None and task.capability.startswith("mcp:"):
+            if self._mcp is None:
+                raise RuntimeError("MCP gateway not wired")
+            return await self._execute_mcp(task)
         # Swarm delegation: if the local agent lacks this capability and a
         # coordinator is wired, hand the task to an eligible swarm member.
         # Falls back to local execution otherwise (backward compatible).
@@ -247,6 +257,35 @@ class AgentRuntime:
     def _default_policy(agent: BaseAgent) -> SandboxPolicy:
         """Permissive default policy (ADR-020): no network/subprocess limits."""
         return SandboxPolicy()
+
+    # -- MCP gateway integration (ADR-029) -- #
+    async def _execute_mcp(self, task: Task) -> Artifact:
+        """Route an ``mcp:*`` capability through the gateway (ADR-029).
+
+        Capability formats: ``mcp:<server_url>::<tool_name>`` (explicit) or
+        ``mcp:<tool_name>`` (resolved via ``McpGateway.resolve_capability``).
+        Task arguments come from ``task.parameters`` when present (extra field),
+        else ``task.metadata``.
+        """
+        capability = task.capability or ""
+        body = capability[4:]  # strip "mcp:"
+        arguments = getattr(task, "parameters", None) or task.metadata or {}
+        if "::" in body:
+            server_url, tool_name = body.split("::", 1)
+        else:
+            tool = self._mcp.resolve_capability(capability)
+            if tool is None:
+                raise KeyError(f"no MCP tool resolves capability '{capability}'")
+            server_url, tool_name = tool.server_url, tool.name
+        return await self._mcp.call_tool(server_url, tool_name, dict(arguments))
+
+    async def list_mcp_tools(self, server_url: str | None = None) -> list[Any]:
+        """Proxy to the gateway's tool list; [] when no gateway is wired."""
+        if self._mcp is None:
+            return []
+        if server_url is not None:
+            return await self._mcp.list_tools(server_url)
+        return self._mcp.discover_local_tools()
 
     # -- swarm integration (ADR-023) -- #
     async def join_swarm(self, agent_id: str, swarm_id: str, role: str = "worker") -> None:

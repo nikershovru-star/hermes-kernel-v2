@@ -20,6 +20,9 @@ from kernel.marketplace_domain import (
 )
 from kernel.marketplace_store import MarketplaceStore
 from kernel.cluster import ClusterManager
+from kernel.mcp_domain import McpResource, McpServer, McpSession, McpTool
+from kernel.mcp_gateway import McpGateway
+from kernel.mcp_store import McpStore
 from kernel.observability import ObservabilityEngine
 from kernel.observability_domain import LogEntry, MetricRecord, MetricType, TraceSpan
 from kernel.observability_store import ObservabilityStore
@@ -63,4 +66,10 @@ __all__ = [
     "TraceSpan",
     "LogEntry",
     "MetricType",
+    "McpGateway",
+    "McpStore",
+    "McpServer",
+    "McpTool",
+    "McpResource",
+    "McpSession",
 ]

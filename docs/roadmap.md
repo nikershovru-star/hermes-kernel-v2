@@ -1,6 +1,6 @@
 # Hermes Kernel v2 — Roadmap
 
-_Last updated: 2026-07-25 · **v2.14.0** · 649 passed, 3 skipped, 91% total coverage (CI gate ≥85% ✅)_
+_Last updated: 2026-07-25 · **v2.15.0** · 685 passed, 3 skipped, 92% total coverage (CI gate ≥85% ✅)_
 
 | Phase | Название | Статус | Этапы | Gate |
 |-------|----------|--------|-------|------|
@@ -34,6 +34,7 @@ _Last updated: 2026-07-25 · **v2.14.0** · 649 passed, 3 skipped, 91% total cov
 | ADR-026 | Plugin Marketplace / Multi-node | ✅ | `kernel/marketplace_domain.py` + `kernel/marketplace.py` + `kernel/cluster.py` + `kernel/marketplace_store.py` + `kernel/events.py` + `kernel/agent.py` + `kernel/workflow.py` (PluginMarketplace, ClusterManager, MarketplaceStore, 5 events, install_capability, discover_plugins) | 38 tests, 92% |
 | ADR-027 | Observability / Metrics | ✅ | `kernel/observability.py` + `kernel/observability_domain.py` + `kernel/observability_store.py` + `kernel/events.py` + `kernel/agent.py` + `kernel/workflow.py` (ObservabilityEngine, ObservabilityStore, 4 events, agent.execute span, wf.executions metrics) | 30 tests, 92% |
 | ADR-028 | Capability Guard (Permission Sandbox) | ✅ | `kernel/security_domain.py` + `kernel/security_store.py` + `kernel/capability_guard.py` + `kernel/marketplace.py` + `kernel/agent.py` + `kernel/workflow.py` (CapabilityGuard, SecurityStore, Permission/SandboxPolicy/AuditEntry, marketplace/agent/workflow wiring) | 46 tests, 91% |
+| ADR-029 | MCP Gateway / Protocol Adapter | ✅ | `kernel/mcp_domain.py` + `kernel/mcp_gateway.py` + `kernel/mcp_store.py` + `kernel/events.py` + `kernel/agent.py` + `kernel/workflow.py` + `kernel/marketplace.py` (McpGateway, McpStore, 5 mcp.* events, mcp:* capability routing, discover_mcp_tools, PluginSource.MCP_SERVER) | 36 tests, 92% |
 
 > \* `kernel/retrieval_backends.py` coverage is **68% on Windows** (sqlite-vss
 > has no Windows wheels → its 3 tests skip). On Linux with `faiss-cpu` +
@@ -148,11 +149,8 @@ without rewriting the registries.
     branching yet).
 
 ## Next up
-- v2.8.0 — ADR-022: Behavior Engine (human-like scroll/mouse/typing/reading) ✅
-- v2.9.0 — ADR-023: Swarm / Teams (multi-agent orchestration, distributed health)
-- v2.10.0 — ADR-024: Dynamic Planner (LLM-based replanning)
+- v2.16.0 — ADR-030 ⏭ next
 - **Knowledge graph visualization (web UI)** — future.
-- **Plugin marketplace / remote install** — future.
 - **Multi-node distributed kernel** — future.
 
 See the [ADRs](adr/) for architectural decisions behind each phase.

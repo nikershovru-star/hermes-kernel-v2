@@ -79,6 +79,7 @@ class WorkflowEngine:
         marketplace: "PluginMarketplace | None" = None,
         observability: "ObservabilityEngine | None" = None,
         guard: "CapabilityGuard | None" = None,
+        mcp: "McpGateway | None" = None,
     ) -> None:
         self._agents = agent_runtime
         self._caps = capability_executor
@@ -93,6 +94,7 @@ class WorkflowEngine:
         self._mp = marketplace
         self._obs = observability
         self._guard = guard  # ADR-028: optional CapabilityGuard
+        self._mcp = mcp  # ADR-029: optional McpGateway
         self._instances: dict[str, WorkflowInstance] = {}
 
     # -- adaptive execution (ADR-024) ------------------------------------ #
@@ -369,6 +371,21 @@ class WorkflowEngine:
         await self._emit(WorkflowStepStarted(instance.id, step.id, step.capability))
         params = self._resolve_inputs(step, instance, workflow)
 
+        # ADR-029: an "mcp:*" step with no gateway wired fails deterministically
+        # (WorkflowStepFailed reason "mcp_not_wired", instance -> FAILED) — the
+        # same guard-style honest failure as ADR-028, never a silent fallback.
+        is_mcp_step = bool(step.capability) and step.capability.startswith("mcp:")
+        if is_mcp_step and self._mcp is None:
+            instance.status = WorkflowStatus.FAILED
+            await self._emit(
+                WorkflowStepFailed(instance.id, step.id, "mcp_not_wired", attempt, False)
+            )
+            return Artifact(
+                type="error",
+                content={"reason": "mcp_not_wired", "capability": step.capability},
+                format="json",
+            )
+
         # ADR-028: cooperatively guard plugin-backed capabilities. The step
         # runner is wrapped so denials / resource breaches raise INSIDE the
         # guard (full audit trail). We convert them to a clean error artifact
@@ -589,7 +606,9 @@ class WorkflowEngine:
     async def _run_step(
         self, step: WorkflowStep, params: dict[str, Any], agent: Agent | None, instance: WorkflowInstance | None = None
     ) -> Artifact:
-        """Execute a step: via the assigned agent (Task) or CapabilityExecutor."""
+        """Execute a step: via MCP gateway (ADR-029), the assigned agent (Task) or CapabilityExecutor."""
+        if step.capability and step.capability.startswith("mcp:") and self._mcp is not None:
+            return await self._run_mcp_step(step, params, instance)
         if agent is not None and step.capability in agent.capabilities:
             task = Task(
                 name=step.name,
@@ -605,6 +624,29 @@ class WorkflowEngine:
         if self._store is not None:
             await self._store.append(event)
         self._bus.publish(event)
+
+    # -- MCP gateway integration (ADR-029) --------------------------------- #
+    async def _run_mcp_step(
+        self, step: WorkflowStep, params: dict[str, Any], instance: WorkflowInstance | None
+    ) -> Artifact:
+        """Run an ``mcp:*`` step through the gateway; record latency in context."""
+        import time as _time
+
+        capability = step.capability or ""
+        body = capability[4:]
+        if "::" in body:
+            server_url, tool_name = body.split("::", 1)
+        else:
+            tool = self._mcp.resolve_capability(capability)
+            if tool is None:
+                raise KeyError(f"no MCP tool resolves capability '{capability}'")
+            server_url, tool_name = tool.server_url, tool.name
+        started = _time.monotonic()
+        artifact = await self._mcp.call_tool(server_url, tool_name, dict(params))
+        latency_ms = (_time.monotonic() - started) * 1000.0
+        if instance is not None:
+            instance.context["mcp_latency_ms"] = latency_ms
+        return artifact
 
 
 __all__ = ["WorkflowEngine"]

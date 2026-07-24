@@ -4,6 +4,42 @@ All notable changes to Hermes Kernel v2 are documented here. The format is
 loosely based on [Keep a Changelog](https://keepachangelog.com/); this project
 adheres to **semantic versioning** (MAJOR.MINOR.PATCH).
 
+## [v2.15.0] — 2026-07-25 · MCP Gateway / Protocol Adapter (ADR-029)
+
+### Added
+- **`kernel/mcp_domain.py`** — isolated ADR-local models (pattern:
+  `security_domain.py` / `observability_domain.py`): `McpServer`, `McpTool`,
+  `McpResource`, `McpSession`.
+- **`kernel/mcp_gateway.py`** — `McpGateway`: thin async MCP client
+  (JSON-RPC 2.0 over injected `http_client.post`, MCP 2024-11-05).
+  `connect` / `list_tools` / `call_tool` (→ `Artifact(type="mcp_tool_result")`)
+  / `read_resource` / `close_session` / `discover_local_tools` /
+  `resolve_capability` (exact + `prefix.*` wildcard). Bounded retry with
+  injectable `sleep`, timeout handling, optional ADR-027 `metrics` recording
+  `mcp.tool_latency_ms` / `mcp.tool_errors`.
+- **`kernel/mcp_store.py`** — `McpStore`: SQLite (`servers` / `tools` /
+  `sessions` / `calls`) + in-memory fallback, repo-reload on `db_path`.
+- **5 events** in `kernel/events.py` (namespaced `mcp.*`): `McpConnected`,
+  `McpToolCalled`, `McpResourceRead`, `McpSessionClosed`, `McpError`.
+- **Wiring (all optional, `mcp=None` default):** `AgentRuntime(mcp=)` routes
+  `mcp:*` capabilities through the gateway (raises
+  `RuntimeError("MCP gateway not wired")` when unwired — deterministic, no
+  silent fallback) + `list_mcp_tools()`; `WorkflowEngine(mcp=)` runs `mcp:*`
+  steps via the gateway, records `context["mcp_latency_ms"]`, and fails
+  honestly with `WorkflowStepFailed("mcp_not_wired")` when unwired;
+  `PluginMarketplace(mcp=)` gains `discover_mcp_tools(source_url)` (catalog
+  entries + virtual `PluginPackage`s, `source=MCP_SERVER`) and augments
+  `list_available()`.
+- **`PluginSource.MCP_SERVER`** enum member (ADR-029).
+- **36 new tests** (`test_mcp_gateway.py` 15, `test_mcp_store.py` 8,
+  `test_mcp_integration.py` 13); total **685 passed, 3 skipped, 92% coverage**.
+
+### Honest Notes
+- MCP 2024-11-05 **client-only** (server side stays in `mcp/`, ADR-008);
+  JSON-RPC over HTTP only (no stdio / SSE streaming); request-response only;
+  Bearer-token auth (no OAuth PKCE); logical sessions (not persistent
+  connections); capability→tool mapping by name, not semantic.
+
 ## [v2.14.0] — 2026-07-25 · Capability Guard (ADR-028)
 
 ### Added

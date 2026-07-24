@@ -829,6 +829,73 @@ class AuditLogEntry(DomainEvent):
         )
 
 
+# --------------------------------------------------------------------------- #
+# MCP Gateway events (ADR-029) — namespaced ``mcp.*``
+# --------------------------------------------------------------------------- #
+class McpConnected(DomainEvent):
+    """A client session to a remote MCP server was established."""
+
+    def __init__(self, session_id: str, server_url: str, server_name: str = "", server_version: str = "") -> None:
+        super().__init__(
+            type="mcp.connected",
+            aggregate_id=session_id,
+            payload={
+                "session_id": session_id,
+                "server_url": server_url,
+                "server_name": server_name,
+                "server_version": server_version,
+            },
+        )
+
+
+class McpToolCalled(DomainEvent):
+    """A remote MCP tool was invoked through the gateway."""
+
+    def __init__(self, session_id: str, tool_name: str, arguments_hash: str, latency_ms: float) -> None:
+        super().__init__(
+            type="mcp.tool_called",
+            aggregate_id=session_id,
+            payload={
+                "tool_name": tool_name,
+                "arguments_hash": arguments_hash,
+                "latency_ms": latency_ms,
+            },
+        )
+
+
+class McpResourceRead(DomainEvent):
+    """A remote MCP resource was read through the gateway."""
+
+    def __init__(self, session_id: str, uri: str, size_bytes: int) -> None:
+        super().__init__(
+            type="mcp.resource_read",
+            aggregate_id=session_id,
+            payload={"uri": uri, "size_bytes": size_bytes},
+        )
+
+
+class McpSessionClosed(DomainEvent):
+    """A client session with a remote MCP server was closed."""
+
+    def __init__(self, session_id: str, reason: str = "explicit_close") -> None:
+        super().__init__(
+            type="mcp.session_closed",
+            aggregate_id=session_id,
+            payload={"reason": reason},
+        )
+
+
+class McpError(DomainEvent):
+    """A gateway operation against a remote MCP server failed."""
+
+    def __init__(self, server_url: str, error_type: str, message: str) -> None:
+        super().__init__(
+            type="mcp.error",
+            aggregate_id=server_url,
+            payload={"error_type": error_type, "message": message},
+        )
+
+
 __all__ = [
     "DomainEvent",
     "EventStore",
@@ -890,4 +957,9 @@ __all__ = [
     "ResourceLimitExceeded",
     "PluginSandboxed",
     "AuditLogEntry",
+    "McpConnected",
+    "McpToolCalled",
+    "McpResourceRead",
+    "McpSessionClosed",
+    "McpError",
 ]
