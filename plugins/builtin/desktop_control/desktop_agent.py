@@ -84,12 +84,14 @@ class DesktopAgent(BaseAgent):
         store: EventStore,
         command_bus: CommandBus,
         vision: Any = None,
+        behavior: Any = None,
     ) -> None:
         super().__init__(agent_entity)
         self._bus = bus
         self._store = store
         self._command_bus = command_bus
         self._vision = vision
+        self._behavior = behavior
         self._capability_executor = CapabilityExecutor()
         self._running = False
         self._event_ids: list[str] = []
@@ -171,14 +173,42 @@ class DesktopAgent(BaseAgent):
         if not self._running:
             raise RuntimeError(f"agent {agent_id} is not running")
         cap = task.capability or ""
-        # route via CommandBus -> handler -> event emission
+        md = task.metadata
+
+        # Behavior-driven path (ADR-022): human-like curves/rhythm when a
+        # BehaviorEngine is wired in. Falls through to the CommandBus path when
+        # behavior is None (backward compatible).
+        if self._behavior is not None and cap in {
+            "desktop.click",
+            "desktop.type",
+            "desktop.scroll",
+            "desktop.read",
+        }:
+            if cap == "desktop.click":
+                await self._behavior.click(md.get("x", 0), md.get("y", 0), md.get("button", "left"))
+            elif cap == "desktop.type":
+                await self._behavior.type_text(md.get("text", ""))
+            elif cap == "desktop.scroll":
+                await self._behavior.scroll_page(md.get("direction", "down"))
+            elif cap == "desktop.read":
+                region = tuple(md.get("region", (0, 0, 0, 0)))
+                await self._behavior.read_text(md.get("text", ""), region)  # type: ignore[arg-type]
+            return Artifact(
+                type=cap,
+                content={"ok": True, "behavior": True},
+                format="json",
+                source="agent:desktop",
+                provenance=list(self._behavior.session.action_log),
+            )
+
+        # route via CommandBus -> handler -> event emission (legacy path)
         if cap == "desktop.click":
-            x, y = task.metadata.get("x", 0), task.metadata.get("y", 0)
+            x, y = md.get("x", 0), md.get("y", 0)
             await self._command_bus.send(DesktopClick(agent_id, x, y))
         elif cap == "desktop.type":
-            await self._command_bus.send(DesktopType(agent_id, task.metadata.get("text", "")))
+            await self._command_bus.send(DesktopType(agent_id, md.get("text", "")))
         elif cap == "desktop.screenshot":
-            region = task.metadata.get("region")
+            region = md.get("region")
             await self._command_bus.send(DesktopScreenshot(agent_id, region))
             last = self._last_event_of_type("desktop.screenshot_taken")
             return Artifact(

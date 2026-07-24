@@ -4,6 +4,41 @@ All notable changes to Hermes Kernel v2 are documented here. The format is
 loosely based on [Keep a Changelog](https://keepachangelog.com/); this project
 adheres to **semantic versioning** (MAJOR.MINOR.PATCH).
 
+## [v2.8.0] — 2026-07-24 · Behavior Engine (ADR-022)
+
+### Added
+- **`plugins/builtin/desktop_control/behavior.py`** — `BehaviorEngine`,
+  human-like desktop primitives (all async, pyautogui via `asyncio.to_thread`,
+  injectable RNG + sleep for deterministic tests):
+  - `move_to` / `click` — quadratic Bezier path with overshoot + correction,
+    gaze fixation before click
+  - `scroll_page` / `scroll_to_element` — momentum (accelerate→coast→
+    decelerate) + reading pauses
+  - `type_text` — WPM-derived variable intervals, bursts, typo + backspace +
+    retype
+  - `gaze_at` / `read_text` — saccade + fixation, word-group reading with
+    bounded regressions
+- **`plugins/builtin/desktop_control/human_profile.py`** — `HumanProfileStore`
+  CRUD + optional SQLite persistence for named behavior profiles
+- **`kernel/domain.py`** — `BehaviorProfile`, `BehaviorSession`,
+  `HumanBehaviorProfile` (named to avoid colliding with ADR-013 `HumanProfile`)
+- **`kernel/events.py`** — `MouseMoved`, `MouseClicked`, `Scrolled`, `TextTyped`,
+  `GazeFixated`, `ReadingProgress`
+- **`vision.py`** — `UIElement.center` / `center_x` / `center_y` +
+  `DesktopVision.find_element_for_behavior`
+- **Integration (optional, backward-compatible):** `DesktopAgent(behavior=…)`
+  routes `desktop.click/type/scroll/read` through the engine; legacy CommandBus
+  path preserved when `behavior=None`
+- **Tests:** `test_behavior_engine.py` (18), `test_human_profile.py` (10),
+  `test_behavior_integration.py` (7) — total **412 passed, 3 skipped, 91% cov**
+
+### Honest notes (deferred)
+- Bezier curves approximated (quadratic, not cubic); timing uses uniform (not
+  Gaussian) distributions
+- Gaze is 2D only (no head/blink); reading uses simple word-split (no NLP)
+- No anti-detection beyond timing (no viewport jitter / UA rotation)
+- Profile persistence is in-memory + optional SQLite (no cloud sync)
+
 ## [v2.7.0] — 2026-07-24 · Health & Recovery (ADR-021)
 
 ### Added

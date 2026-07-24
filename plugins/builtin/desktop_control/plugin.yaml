@@ -1,6 +1,6 @@
 plugin_id: desktop_control
 name: desktop_control
-version: 2.3.0
+version: 2.8.0
 capabilities: [hermes.desktop]
 entrypoint: plugins.builtin.desktop_control:DesktopControlPlugin
 agent_entrypoint: plugins.builtin.desktop_control:DesktopAgent
@@ -11,3 +11,11 @@ sandbox_policy:
   timeout_seconds: 10.0
   allow_network: false
   allow_subprocess: false
+behavior_profile:
+  mouse_speed: 1.0
+  mouse_curve: bezier
+  mouse_overshoot: true
+  scroll_momentum: true
+  typing_wpm: 40
+  typing_error_rate: 0.02
+  reading_regression_rate: 0.1

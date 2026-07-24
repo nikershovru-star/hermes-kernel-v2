@@ -29,6 +29,23 @@ class UIElement:
     confidence: float
     type: str = "unknown"
 
+    @property
+    def center_x(self) -> int:
+        """Horizontal center of the bounding box (for gaze/mouse targeting)."""
+        x, _, w, _ = self.bbox
+        return x + w // 2
+
+    @property
+    def center_y(self) -> int:
+        """Vertical center of the bounding box (for gaze/mouse targeting)."""
+        _, y, _, h = self.bbox
+        return y + h // 2
+
+    @property
+    def center(self) -> tuple[int, int]:
+        """Center point (center_x, center_y)."""
+        return (self.center_x, self.center_y)
+
 
 def _require_pillow():
     try:
@@ -129,3 +146,13 @@ class DesktopVision:
                 best = el
         # require a reasonable match
         return best if (best is not None and best_score >= 0.6) else None
+
+    async def find_element_for_behavior(self, label: str, image: Any) -> UIElement | None:
+        """Find an element by label and return it with a usable center point.
+
+        Thin wrapper over :meth:`find_element` intended for the BehaviorEngine:
+        the returned ``UIElement`` exposes ``center`` / ``center_x`` /
+        ``center_y`` for gaze + mouse targeting (ADR-022). Returns None if no
+        confident match is found.
+        """
+        return await self.find_element(image, label)

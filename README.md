@@ -3,8 +3,8 @@
 > An async-first, event-driven **AI Operating System** kernel — Clean
 > Architecture, plugin-extensible, MCP-native.
 
-**Status:** v2.7.0 · **377 passed, 3 skipped, 91% coverage** (Python 3.11+).
-All phases P0–P5 + extensions A/A2/B/C/D/E/F + ADR-007..021 + CI axis-gate delivered.
+**Status:** v2.8.0 · **412 passed, 3 skipped, 91% coverage** (Python 3.11+).
+All phases P0–P5 + extensions A/A2/B/C/D/E/F + ADR-007..022 + CI axis-gate delivered.
 
 ---
 
@@ -317,6 +317,13 @@ Decisions are recorded as ADRs:
   failed work, `CircuitBreaker` per-capability state machine, `RecoveryEngine`
   auto-restart/escalation); optional integration into `AgentRuntime`/
   `WorkflowEngine`/`CapabilityExecutor` (backward-compatible). 40 tests.
+- [ADR-022 — Behavior Engine](docs/adr/ADR-022-behavior-engine.md) —
+  `plugins/builtin/desktop_control/behavior.py` (`BehaviorEngine`: Bezier mouse
+  curves + overshoot, scroll momentum, WPM typing rhythm with typos, gaze
+  fixation + reading saccades/regressions) + `human_profile.py`
+  (`HumanProfileStore` CRUD + SQLite); optional integration into `DesktopAgent`
+  (`desktop.click/type/scroll/read`), `UIElement.center*` for targeting.
+  35 tests.
 
 ---
 

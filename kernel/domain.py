@@ -347,6 +347,66 @@ class CircuitBreakerState(str, Enum):
     HALF_OPEN = "half_open"  # testing if recovered
 
 
+# --------------------------------------------------------------------------- #
+# Behavior Engine (ADR-022) — human-like desktop automation config
+# --------------------------------------------------------------------------- #
+class BehaviorProfile(BaseModel):
+    """Human-like behavior configuration (ADR-022).
+
+    Tuning knobs for how "human" the automation appears. Defaults model an
+    average, unhurried user. All ``(min, max)`` ranges are inclusive bounds a
+    behavior engine samples uniformly.
+    """
+
+    # Mouse
+    mouse_speed: float = 1.0  # 0.5=slow, 1.0=normal, 2.0=fast
+    mouse_curve: str = "bezier"  # "linear" | "bezier" | "catmull"
+    mouse_overshoot: bool = True  # slight overshoot + correction
+    mouse_pause_ms: tuple[int, int] = (50, 150)  # pause range after move
+
+    # Scroll
+    scroll_momentum: bool = True  # accelerate → coast → decelerate
+    scroll_distance_px: tuple[int, int] = (300, 800)  # per-scroll distance
+    scroll_pause_ms: tuple[int, int] = (500, 2000)  # pause between scrolls
+    scroll_reading_pause_ms: tuple[int, int] = (2000, 5000)  # pause at content
+
+    # Typing
+    typing_wpm: int = 40  # words per minute target
+    typing_error_rate: float = 0.02  # 2% typo + backspace
+    typing_burst_size: tuple[int, int] = (3, 8)  # chars typed before pause
+
+    # Gaze / Reading
+    gaze_fixation_ms: tuple[int, int] = (150, 400)  # look before click
+    gaze_saccade_ms: tuple[int, int] = (20, 80)  # move between elements
+    reading_words_per_fixation: int = 2  # words per gaze stop
+    reading_regression_rate: float = 0.1  # 10% backward saccades
+
+
+class BehaviorSession(BaseModel):
+    """A running behavior session with mutable state (ADR-022)."""
+
+    profile: BehaviorProfile
+    current_position: tuple[int, int] = (0, 0)  # last mouse position
+    scroll_position: int = 0  # current scroll Y
+    gaze_target: tuple[int, int] | None = None  # where "eyes" are looking
+    action_log: list[str] = Field(default_factory=list)  # behavior event ids
+
+
+class HumanBehaviorProfile(BaseModel):
+    """Persistent human behavior profile (ADR-022).
+
+    Saved per-user, loaded at session start. Extends ``BehaviorProfile`` with
+    identity-specific metadata (name, timestamps). Named ``HumanBehaviorProfile``
+    to avoid colliding with the ADR-013 ``HumanProfile`` (Human Emulation layer).
+    """
+
+    profile_id: str
+    name: str
+    behavior: BehaviorProfile = Field(default_factory=BehaviorProfile)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
 class PluginManifest(BaseModel):
     """Declarative plugin contract (validated on construction)."""
 

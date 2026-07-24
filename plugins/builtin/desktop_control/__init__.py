@@ -12,7 +12,9 @@ imported directly from there to keep the package root from depending on its own
 submodule.
 """
 
+from .behavior import BehaviorEngine
 from .desktop_agent import DesktopAgent
 from .desktop_control import DesktopControlPlugin
+from .human_profile import HumanProfileStore
 
-__all__ = ["DesktopControlPlugin", "DesktopAgent"]
+__all__ = ["DesktopControlPlugin", "DesktopAgent", "BehaviorEngine", "HumanProfileStore"]

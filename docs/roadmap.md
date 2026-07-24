@@ -27,7 +27,8 @@ _Last updated: 2026-07-23 · **v2.5.0** · 320 passed, 3 skipped, 89% total cove
 | ADR-019 | Workflow Runtime Foundation | ✅ | `kernel/workflow.py` + `kernel/planner.py` + `kernel/domain.py` | 23 tests, 89% |
 | ADR-020 | Execution Sandbox | ✅ | `kernel/sandbox.py` + `kernel/domain.py` + `kernel/events.py` | 17 tests, 89% |
 | ADR-021 | Health & Recovery | ✅ | `kernel/health.py` (HealthMonitor, DeadLetterQueue, CircuitBreaker, RecoveryEngine) | 40 tests, 96% |
-| ADR-022 | Swarm / Teams | ⏭ next | distributed health, multi-node orchestration | — |
+| ADR-022 | Behavior Engine | ✅ | `plugins/builtin/desktop_control/behavior.py` + `human_profile.py` (BehaviorEngine, HumanProfileStore) | 35 tests, 95% |
+| ADR-023 | Swarm / Teams | ⏭ next | distributed health, multi-node orchestration | — |
 
 > \* `kernel/retrieval_backends.py` coverage is **68% on Windows** (sqlite-vss
 > has no Windows wheels → its 3 tests skip). On Linux with `faiss-cpu` +
@@ -142,10 +143,9 @@ without rewriting the registries.
     branching yet).
 
 ## Next up
-- **v2.6.0 — ADR-020: Sandbox** (plugin execution isolation / resource limits)
-- v2.7.0 — ADR-021: Health & Recovery (liveness, dead-letter, auto-restart)
-- v2.8.0 — ADR-022: Swarm / Teams (multi-agent orchestration)
-- v2.9.0 — ADR-023: Dynamic Planner (LLM-based replanning)
+- v2.8.0 — ADR-022: Behavior Engine (human-like scroll/mouse/typing/reading) ✅
+- v2.9.0 — ADR-023: Swarm / Teams (multi-agent orchestration, distributed health)
+- v2.10.0 — ADR-024: Dynamic Planner (LLM-based replanning)
 - **Knowledge graph visualization (web UI)** — future.
 - **Plugin marketplace / remote install** — future.
 - **Multi-node distributed kernel** — future.

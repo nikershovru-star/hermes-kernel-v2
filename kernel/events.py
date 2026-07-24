@@ -361,6 +361,87 @@ class CircuitBreakerTripped(DomainEvent):
         )
 
 
+# --------------------------------------------------------------------------- #
+# Behavior Engine events (ADR-022)
+# --------------------------------------------------------------------------- #
+class MouseMoved(DomainEvent):
+    """Mouse moved to a new position along a curve."""
+
+    def __init__(
+        self,
+        agent_id: str,
+        from_pos: tuple[int, int],
+        to_pos: tuple[int, int],
+        duration_ms: float,
+        curve_type: str,
+    ) -> None:
+        super().__init__(
+            type="behavior.mouse_moved",
+            aggregate_id=agent_id,
+            payload={
+                "from_pos": list(from_pos),
+                "to_pos": list(to_pos),
+                "duration_ms": duration_ms,
+                "curve_type": curve_type,
+            },
+        )
+
+
+class MouseClicked(DomainEvent):
+    """Mouse clicked after a gaze fixation."""
+
+    def __init__(self, agent_id: str, position: tuple[int, int], fixation_ms: int, button: str) -> None:
+        super().__init__(
+            type="behavior.mouse_clicked",
+            aggregate_id=agent_id,
+            payload={"position": list(position), "fixation_ms": fixation_ms, "button": button},
+        )
+
+
+class Scrolled(DomainEvent):
+    """Scroll with momentum completed."""
+
+    def __init__(self, agent_id: str, direction: str, distance_px: int, pauses_ms: list[int]) -> None:
+        super().__init__(
+            type="behavior.scrolled",
+            aggregate_id=agent_id,
+            payload={"direction": direction, "distance_px": distance_px, "pauses_ms": pauses_ms},
+        )
+
+
+class TextTyped(DomainEvent):
+    """Text typed with human rhythm."""
+
+    def __init__(self, agent_id: str, text: str, wpm: int, error_count: int, duration_ms: float) -> None:
+        super().__init__(
+            type="behavior.text_typed",
+            aggregate_id=agent_id,
+            payload={"text": text, "wpm": wpm, "error_count": error_count, "duration_ms": duration_ms},
+        )
+
+
+class GazeFixated(DomainEvent):
+    """Gaze fixed on a point (reading / pre-click)."""
+
+    def __init__(self, agent_id: str, position: tuple[int, int], duration_ms: int) -> None:
+        super().__init__(
+            type="behavior.gaze_fixated",
+            aggregate_id=agent_id,
+            payload={"position": list(position), "duration_ms": duration_ms},
+        )
+
+
+class ReadingProgress(DomainEvent):
+    """Reading simulation progressed."""
+
+    def __init__(self, agent_id: str, words_read: int, regressions: int, duration_ms: float) -> None:
+        super().__init__(
+            type="behavior.reading_progress",
+            aggregate_id=agent_id,
+            payload={"words_read": words_read, "regressions": regressions, "duration_ms": duration_ms},
+        )
+
+
 __all__ = [
     "DomainEvent",
     "EventStore",
@@ -383,4 +464,10 @@ __all__ = [
     "DeadLetterAppended",
     "DeadLetterRecovered",
     "CircuitBreakerTripped",
+    "MouseMoved",
+    "MouseClicked",
+    "Scrolled",
+    "TextTyped",
+    "GazeFixated",
+    "ReadingProgress",
 ]
