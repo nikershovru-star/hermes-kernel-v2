@@ -88,6 +88,7 @@ class AgentRuntime:
         swarm_coordinator: "SwarmCoordinator | None" = None,
         knowledge_graph: "KnowledgeGraphEngine | None" = None,
         marketplace: "PluginMarketplace | None" = None,
+        observability: "ObservabilityEngine | None" = None,
     ) -> None:
         self._agents: dict[str, BaseAgent] = {}
         self._bus = bus
@@ -97,6 +98,7 @@ class AgentRuntime:
         self._swarm = swarm_coordinator
         self._kg = knowledge_graph
         self._mp = marketplace
+        self._obs = observability
         self._swarm_ids: dict[str, str] = {}  # agent_id -> swarm_id
         self._default_graphs: dict[str, str] = {}  # agent_id -> graph_id
 
@@ -119,6 +121,8 @@ class AgentRuntime:
                 payload={"agent_type": agent.__class__.__name__},
             )
         )
+        if self._obs is not None:
+            await self._obs.log("info", f"agent started: {agent.name}", correlation_id=agent_id, context={"agent_type": agent.__class__.__name__})
         return agent_id
 
     async def _probe_agent(self, agent_id: str) -> bool:
@@ -193,16 +197,33 @@ class AgentRuntime:
                 except (KeyError, ValueError):
                     # no eligible member → fall through to local execution
                     pass
-        if self._sandbox is None:
-            return await agent.execute(agent_id, task)
-        # Sandboxed execution: breach cancels + stops the agent (cleanup hook).
-        policy = policy or self._default_policy(agent)
-        return await self._sandbox.run(
-            agent.execute(agent_id, task),
-            policy=policy,
-            cleanup=lambda: agent.stop(agent_id),
-            context={"agent_id": agent_id, "task_id": task.id},
-        )
+        corr = workflow_id or agent_id
+        span_id = None
+        if self._obs is not None:
+            span_id = await self._obs.start_span(corr, "agent.execute", correlation_id=corr)
+            await self._obs.log("debug", f"agent execute: {agent_id} cap={task.capability}", correlation_id=corr, context={"capability": task.capability})
+        try:
+            if self._sandbox is None:
+                result = await agent.execute(agent_id, task)
+            else:
+                # Sandboxed execution: breach cancels + stops the agent (cleanup hook).
+                policy = policy or self._default_policy(agent)
+                result = await self._sandbox.run(
+                    agent.execute(agent_id, task),
+                    policy=policy,
+                    cleanup=lambda: agent.stop(agent_id),
+                    context={"agent_id": agent_id, "task_id": task.id},
+                )
+            if self._obs is not None:
+                await self._obs.record_metric("agent.executions", 1.0, labels={"agent_id": agent_id, "capability": task.capability or ""})
+            return result
+        except Exception as exc:  # noqa: BLE001
+            if self._obs is not None:
+                await self._obs.log("error", f"agent execution failed: {exc}", correlation_id=corr, context={"agent_id": agent_id})
+            raise
+        finally:
+            if span_id is not None:
+                await self._obs.finish_span(span_id, status="ok")
 
     @staticmethod
     def _default_policy(agent: BaseAgent) -> SandboxPolicy:
@@ -348,7 +369,16 @@ class AgentRuntime:
                     tools=[],
                 )
                 await capability_registry.register(cap)
+        if self._obs is not None:
+            await self._obs.log("info", f"capability installed: {package_id}", correlation_id=agent_id, context={"capabilities": installed.capabilities})
+            await self._obs.record_metric("agent.capability_installs", 1.0, labels={"agent_id": agent_id})
         return installed
+
+    def get_health(self) -> dict:
+        """Proxy the observability health snapshot (or empty dict if unwired)."""
+        if self._obs is not None:
+            return self._obs.get_health_snapshot()
+        return {}
 
     async def _publish(self, event: DomainEvent) -> None:
         """Append to store + publish on bus if either is configured."""

@@ -4,6 +4,53 @@ All notable changes to Hermes Kernel v2 are documented here. The format is
 loosely based on [Keep a Changelog](https://keepachangelog.com/); this project
 adheres to **semantic versioning** (MAJOR.MINOR.PATCH).
 
+## [v2.13.0] — 2026-07-24 · Observability / Metrics (ADR-027)
+
+### Added
+- **`kernel/observability_domain.py`** — isolated Pydantic models:
+  `MetricType` (counter/histogram/gauge enum), `MetricRecord`, `TraceSpan`,
+  `LogEntry`. Self-contained axis (`kernel.observability_domain` +
+  `kernel.events` only), mirroring `semantic_graph.py` / `marketplace_domain.py`.
+- **`kernel/observability.py`** — `ObservabilityEngine` (async, injectable
+  `clock`/`rng`/`sleep`/`event_bus`/`event_store`/`store`): `record_metric`,
+  `start_span`/`finish_span`/`get_trace`, `log`/`get_logs`,
+  `get_health_snapshot`, `export_metrics` (Prometheus exposition text). Bounded
+  ring buffers (default 1000) for metrics/logs/spans. Axis:
+  `kernel.observability_domain` + `kernel.events` only.
+- **`kernel/observability_store.py`** — `ObservabilityStore`: in-memory CRUD +
+  optional SQLite (`metrics`/`spans`/`logs`), repo-reload on `db_path`. Mirrors
+  `PlanStore` / `GraphStore` / `MarketplaceStore`.
+- **`kernel/events.py`** — 4 new events (ADR-027): `MetricRecorded`,
+  `TraceSpanStarted`, `TraceSpanFinished`, `LogEntryEmitted` (namespaced
+  `obs.*`).
+- **Integration (no behavior change when unwired):** `AgentRuntime(observability=)`
+  logs `agent started`, wraps `execute()` in a `agent.execute` span, records
+  `agent.executions`, logs failures, counts `agent.capability_installs`, exposes
+  `get_health()`; `WorkflowEngine(observability=)` spans `execute_adaptive` /
+  `execute_with_context`, records `wf.executions` / `wf.steps_total` /
+  `wf.errors` / `wf.kg_matches`, logs `workflow started` / `workflow executed` /
+  `workflow execution failed`.
+- **Exports** added to `kernel/__init__.py`: `ObservabilityEngine`,
+  `ObservabilityStore`, `MetricRecord`, `TraceSpan`, `LogEntry`, `MetricType`.
+- **30 new tests** (`test_observability.py`, `test_observability_store.py`,
+  `test_observability_integration.py`): counters/gauges/histograms, span
+  open/close + `get_trace`, level-filtered log query, health snapshot, Prometheus
+  export shape, SQLite persistence + reload, agent/workflow wiring (no-op when
+  unwired + spans/metrics when wired).
+
+### Metrics (release gate)
+- **619 passed, 3 skipped** (baseline 589 → +30).
+- Kernel total coverage **92%** (`observability.py` 92%, `observability_store.py`
+  98%, `observability_domain.py` 100%).
+- `tach check` green. Protected files (`sandbox`/`discovery`/`bus`/`planner`/
+  `registry`) untouched.
+
+### Known limitations
+- Prometheus export emits cumulative counters + latest gauge/histogram sample
+  (no histogram bucket math).
+- Ring buffers are not an LTS store — pair with `ObservabilityStore` (SQLite) for
+  durability.
+
 ## [v2.12.0] — 2026-07-24 · Plugin Marketplace & Multi-node (ADR-026)
 
 ### Added

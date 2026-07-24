@@ -72,6 +72,7 @@ class WorkflowEngine:
         dynamic_planner: "DynamicPlanner | None" = None,
         knowledge_graph: "KnowledgeGraphEngine | None" = None,
         marketplace: "PluginMarketplace | None" = None,
+        observability: "ObservabilityEngine | None" = None,
     ) -> None:
         self._agents = agent_runtime
         self._caps = capability_executor
@@ -84,6 +85,7 @@ class WorkflowEngine:
         self._planner = dynamic_planner
         self._kg = knowledge_graph
         self._mp = marketplace
+        self._obs = observability
         self._instances: dict[str, WorkflowInstance] = {}
 
     # -- adaptive execution (ADR-024) ------------------------------------ #
@@ -91,6 +93,39 @@ class WorkflowEngine:
         self._planner = dynamic_planner
 
     async def execute_adaptive(
+        self, instance_id: str, workflow: Workflow
+    ) -> list[Artifact]:
+        span_id = None
+        if self._obs is not None:
+            span_id = await self._obs.start_span(instance_id, "execute_adaptive", correlation_id=instance_id)
+        try:
+            result = await self._execute_adaptive_inner(instance_id, workflow)
+            if self._obs is not None:
+                await self._obs.record_metric(
+                    "wf.executions", 1.0,
+                    labels={"workflow_id": workflow.id, "instance_id": instance_id},
+                )
+                await self._obs.record_metric(
+                    "wf.steps_total", float(len(workflow.steps)),
+                    labels={"workflow_id": workflow.id},
+                )
+                errs = sum(1 for a in result if getattr(a, "type", None) in ("error", "approval_required"))
+                if errs:
+                    await self._obs.record_metric("wf.errors", float(errs), labels={"workflow_id": workflow.id})
+                    await self._obs.log("error", f"workflow {workflow.id} completed with {errs} failed step(s)", correlation_id=instance_id, context={"workflow_id": workflow.id})
+                else:
+                    await self._obs.log("info", f"workflow executed: {workflow.id}", correlation_id=instance_id, context={"steps": len(workflow.steps)})
+            return result
+        except Exception as exc:  # noqa: BLE001
+            if self._obs is not None:
+                await self._obs.log("error", f"workflow execution failed: {exc}", correlation_id=instance_id, context={"workflow_id": workflow.id})
+                await self._obs.record_metric("wf.errors", 1.0, labels={"workflow_id": workflow.id})
+            raise
+        finally:
+            if span_id is not None:
+                await self._obs.finish_span(span_id, status="ok")
+
+    async def _execute_adaptive_inner(
         self, instance_id: str, workflow: Workflow
     ) -> list[Artifact]:
         if self._planner is None:
@@ -189,7 +224,15 @@ class WorkflowEngine:
                         matched.append(e.entity_id)
             workflow.context.setdefault("kg_matches", []).extend(matched)
         # reuse the adaptive/fallback path
-        return await self.execute_adaptive(instance_id, workflow)
+        span_id = None
+        if self._obs is not None:
+            span_id = await self._obs.start_span(instance_id, "execute_with_context", parent_id=instance_id, correlation_id=instance_id)
+            if matched := workflow.context.get("kg_matches"):
+                await self._obs.record_metric("wf.kg_matches", float(len(matched)), labels={"workflow_id": workflow.id})
+        result = await self.execute_adaptive(instance_id, workflow)
+        if span_id is not None:
+            await self._obs.finish_span(span_id, status="ok")
+        return result
 
     async def discover_plugins(self, capability_query: str) -> list[PluginPackage]:
         """Find installed/available packages providing ``capability_query``.
@@ -226,7 +269,15 @@ class WorkflowEngine:
             workflow.context.update(context)
         self._instances[inst.id] = inst
         logger.info("WorkflowEngine: started instance %s for workflow %s", inst.id, workflow.id)
+        if self._obs is not None:
+            await self._obs.log("info", f"workflow started: {workflow.id}", correlation_id=inst.id, context={"steps": len(workflow.steps)})
         return inst
+
+    async def _observe_span(self, trace_id: str, span_name: str, correlation_id: str | None = None):
+        """Context-manager-free span helper; returns the span_id and finishes lazily."""
+        if self._obs is None:
+            return None
+        return await self._obs.start_span(trace_id, span_name, correlation_id=correlation_id)
 
     def get_instance(self, instance_id: str) -> WorkflowInstance:
         inst = self._instances.get(instance_id)

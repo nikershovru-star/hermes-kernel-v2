@@ -732,6 +732,51 @@ class NodeLeft(DomainEvent):
         )
 
 
+# -- observability (ADR-027) ------------------------------------------- #
+class MetricRecorded(DomainEvent):
+    """A metric sample was recorded (counter / histogram / gauge)."""
+
+    def __init__(self, name: str, value: float, metric_type: str, labels: dict, aggregate_id: str = "") -> None:
+        super().__init__(
+            type="obs.metric_recorded",
+            aggregate_id=aggregate_id,
+            payload={"name": name, "value": value, "type": metric_type, "labels": labels},
+        )
+
+
+class TraceSpanStarted(DomainEvent):
+    """A trace span began."""
+
+    def __init__(self, span_id: str, trace_id: str, span_name: str, parent_id: str | None, correlation_id: str | None = None) -> None:
+        super().__init__(
+            type="obs.span_started",
+            aggregate_id=trace_id,
+            payload={"span_id": span_id, "trace_id": trace_id, "span_name": span_name, "parent_id": parent_id, "correlation_id": correlation_id},
+        )
+
+
+class TraceSpanFinished(DomainEvent):
+    """A trace span completed."""
+
+    def __init__(self, span_id: str, trace_id: str, status: str, correlation_id: str | None = None) -> None:
+        super().__init__(
+            type="obs.span_finished",
+            aggregate_id=trace_id,
+            payload={"span_id": span_id, "trace_id": trace_id, "status": status, "correlation_id": correlation_id},
+        )
+
+
+class LogEntryEmitted(DomainEvent):
+    """A structured log line was emitted."""
+
+    def __init__(self, level: str, message: str, correlation_id: str | None = None, context: dict | None = None) -> None:
+        super().__init__(
+            type="obs.log_emitted",
+            aggregate_id=correlation_id or "",
+            payload={"level": level, "message": message, "correlation_id": correlation_id, "context": context or {}},
+        )
+
+
 __all__ = [
     "DomainEvent",
     "EventStore",
@@ -785,4 +830,8 @@ __all__ = [
     "PluginInstallFailed",
     "NodeJoined",
     "NodeLeft",
+    "MetricRecorded",
+    "TraceSpanStarted",
+    "TraceSpanFinished",
+    "LogEntryEmitted",
 ]

@@ -1,6 +1,6 @@
 # Hermes Kernel v2 — Roadmap
 
-_Last updated: 2026-07-24 · **v2.12.0** · 589 passed, 3 skipped, 92% total coverage (CI gate ≥85% ✅)_
+_Last updated: 2026-07-24 · **v2.13.0** · 619 passed, 3 skipped, 92% total coverage (CI gate ≥85% ✅)_
 
 | Phase | Название | Статус | Этапы | Gate |
 |-------|----------|--------|-------|------|
@@ -32,7 +32,7 @@ _Last updated: 2026-07-24 · **v2.12.0** · 589 passed, 3 skipped, 92% total cov
 | ADR-024 | Dynamic Planner | ✅ | `kernel/dynamic_planner.py` + `kernel/plan_store.py` + `kernel/domain.py` + `kernel/events.py` + `kernel/workflow.py` + `kernel/swarm.py` (DynamicPlanner, PlanStore, 6 events, execute_adaptive, rebalance_load) | 39 tests, ~91% |
 | ADR-025 | Knowledge Graph & Semantic Memory | ✅ | `kernel/semantic_graph.py` + `kernel/knowledge_graph.py` + `kernel/graph_store.py` + `kernel/domain.py` + `kernel/events.py` + `kernel/agent.py` + `kernel/workflow.py` (KnowledgeGraphEngine, GraphStore, 6 events, remember/recall, execute_with_context) | 46 tests, 91% |
 | ADR-026 | Plugin Marketplace / Multi-node | ✅ | `kernel/marketplace_domain.py` + `kernel/marketplace.py` + `kernel/cluster.py` + `kernel/marketplace_store.py` + `kernel/events.py` + `kernel/agent.py` + `kernel/workflow.py` (PluginMarketplace, ClusterManager, MarketplaceStore, 5 events, install_capability, discover_plugins) | 38 tests, 92% |
-| ADR-027 | Observability / Metrics | ⏭ next | kernel metrics, tracing, structured logs, dashboards | — |
+| ADR-027 | Observability / Metrics | ✅ | `kernel/observability.py` + `kernel/observability_domain.py` + `kernel/observability_store.py` + `kernel/events.py` + `kernel/agent.py` + `kernel/workflow.py` (ObservabilityEngine, ObservabilityStore, 4 events, agent.execute span, wf.executions metrics) | 30 tests, 92% |
 
 > \* `kernel/retrieval_backends.py` coverage is **68% on Windows** (sqlite-vss
 > has no Windows wheels → its 3 tests skip). On Linux with `faiss-cpu` +

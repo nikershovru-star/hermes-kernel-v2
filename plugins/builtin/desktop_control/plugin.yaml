@@ -1,6 +1,6 @@
 plugin_id: desktop_control
 name: desktop_control
-version: 2.12.0
+version: 2.13.0
 capabilities: [hermes.desktop]
 entrypoint: plugins.builtin.desktop_control:DesktopControlPlugin
 agent_entrypoint: plugins.builtin.desktop_control:DesktopAgent
