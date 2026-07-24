@@ -4,6 +4,39 @@ All notable changes to Hermes Kernel v2 are documented here. The format is
 loosely based on [Keep a Changelog](https://keepachangelog.com/); this project
 adheres to **semantic versioning** (MAJOR.MINOR.PATCH).
 
+## [v2.7.0] — 2026-07-24 · Health & Recovery (ADR-021)
+
+### Added
+- **`kernel/health.py`** — v5 Execution Platform Health/Recovery layer:
+  - `HealthMonitor` — periodic liveness probes, one `HealthRecord` per
+    component, one cancellable `asyncio.Task` per probe loop; emits
+    `AgentUnhealthy` / `AgentRecovered` on status transitions
+  - `DeadLetterQueue` — append-only failed-work store; append/list/recover/
+    idempotent `replay(handler)`; emits `DeadLetterAppended`/`DeadLetterRecovered`
+  - `CircuitBreaker` — per-capability `CLOSED→OPEN→HALF_OPEN→CLOSED` state
+    machine (HALF_OPEN admits exactly one test call); emits `CircuitBreakerTripped`
+  - `RecoveryEngine` — subscribes to `AgentUnhealthy`; restart agent / dead-letter
+    workflow / escalate after bounded max-restarts (no infinite loop)
+- **`kernel/domain.py`** — `HealthCheck`, `HealthStatus`, `HealthRecord`,
+  `DeadLetterEntry`, `CircuitBreakerPolicy`, `CircuitBreakerState`
+- **`kernel/events.py`** — `AgentUnhealthy`, `AgentRecovered`, `WorkflowStalled`,
+  `DeadLetterAppended`, `DeadLetterRecovered`, `CircuitBreakerTripped`
+- **Integration (optional, backward-compatible):**
+  - `AgentRuntime(health_monitor=…)` — registers a liveness probe per agent
+  - `WorkflowEngine(health_monitor=…, dead_letter=…)` — exhausted steps are
+    dead-lettered + emit `WorkflowStalled`
+  - `CapabilityExecutor(circuit_breaker=…)` — wraps handler calls in the breaker
+- **Tests:** `test_health_monitor.py`, `test_dead_letter.py`,
+  `test_circuit_breaker.py`, `test_recovery_engine.py`,
+  `test_integration_health.py` (40) — total **377 passed, 3 skipped, 91% cov**
+
+### Honest notes (deferred)
+- In-process probes (no external endpoint); in-memory + EventStore dead-letter
+- Restart is stop+start (not process-level); workflow recovery dead-letters
+  (no checkpoint resume yet); breaker is per-capability
+- Single-node only (no distributed health) → ADR-022 Swarm/Teams
+- Human escalation is log-only (no alerting channel) → future
+
 ## [v2.6.0] — 2026-07-24 · Execution Sandbox (ADR-020)
 
 ### Added

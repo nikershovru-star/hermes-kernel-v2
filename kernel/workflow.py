@@ -20,13 +20,24 @@ from typing import Any
 
 from kernel.agent import Agent, AgentRuntime
 from kernel.capability import CapabilityExecutor
-from kernel.domain import Artifact, SandboxPolicy, Task, Workflow, WorkflowInstance, WorkflowStep, WorkflowStatus
+from kernel.domain import (
+    Artifact,
+    DeadLetterEntry,
+    SandboxPolicy,
+    Task,
+    Workflow,
+    WorkflowInstance,
+    WorkflowStep,
+    WorkflowStatus,
+)
+from kernel.health import DeadLetterQueue, HealthMonitor
 from kernel.sandbox import Sandbox, SandboxError
 from kernel.events import (
     DomainEvent,
     EventBus,
     EventStore,
     WorkflowCompensating,
+    WorkflowStalled,
     WorkflowStepAwaitingApproval,
     WorkflowStepCompleted,
     WorkflowStepFailed,
@@ -46,12 +57,16 @@ class WorkflowEngine:
         event_bus: EventBus,
         event_store: EventStore,
         sandbox: Sandbox | None = None,
+        health_monitor: HealthMonitor | None = None,
+        dead_letter: DeadLetterQueue | None = None,
     ) -> None:
         self._agents = agent_runtime
         self._caps = capability_executor
         self._bus = event_bus
         self._store = event_store
         self._sandbox = sandbox
+        self._health = health_monitor
+        self._dlq = dead_letter
         self._instances: dict[str, WorkflowInstance] = {}
 
     # -- instance lifecycle ---------------------------------------------- #
@@ -150,7 +165,23 @@ class WorkflowEngine:
                     backoff *= 2 ** (attempt - 1)
                 await asyncio.sleep(backoff)
                 return await self.execute_step(instance, workflow, agent)
-            # exhausted -> compensate or fail
+            # exhausted -> dead-letter (optional) then compensate or fail
+            if self._dlq is not None:
+                await self._dlq.append(
+                    DeadLetterEntry(
+                        entry_id=f"{instance.id}:{step.id}:{attempt}",
+                        component_id=instance.id,
+                        entry_type="workflow_step",
+                        payload={
+                            "step_id": step.id,
+                            "capability": step.capability,
+                            "params": params,
+                            "attempt": attempt,
+                        },
+                        error=str(exc),
+                    )
+                )
+            await self._emit(WorkflowStalled(instance.id, step.id, str(exc)))
             if step.compensation:
                 await self.compensate(instance, workflow, step.id)
             else:

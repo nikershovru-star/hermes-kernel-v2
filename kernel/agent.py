@@ -15,8 +15,9 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
-from kernel.domain import Agent, Artifact, SandboxPolicy, Task
+from kernel.domain import Agent, Artifact, HealthCheck, SandboxPolicy, Task
 from kernel.events import DomainEvent, EventBus, EventStore
+from kernel.health import HealthMonitor
 from kernel.sandbox import Sandbox
 
 logger = logging.getLogger("hermes.kernel.agent")
@@ -83,17 +84,26 @@ class AgentRuntime:
         bus: EventBus | None = None,
         store: EventStore | None = None,
         sandbox: Sandbox | None = None,
+        health_monitor: HealthMonitor | None = None,
     ) -> None:
         self._agents: dict[str, BaseAgent] = {}
         self._bus = bus
         self._store = store
         self._sandbox = sandbox
+        self._health = health_monitor
 
     async def start(self, agent: BaseAgent) -> str:
         """Start ``agent`` and register it as running. Return its agent_id."""
         agent_id = await agent.start()
         self._agents[agent_id] = agent
         logger.info("AgentRuntime: started %s (%s)", agent.name, agent_id)
+        if self._health is not None:
+            self._health.register(
+                component_id=agent_id,
+                component_type="agent",
+                probe=lambda aid=agent_id: self._probe_agent(aid),
+                check=HealthCheck(interval_seconds=10.0),
+            )
         await self._publish(
             DomainEvent(
                 type="agent.started",
@@ -103,6 +113,14 @@ class AgentRuntime:
         )
         return agent_id
 
+    async def _probe_agent(self, agent_id: str) -> bool:
+        """Liveness probe: agent is healthy iff its status reports 'running'."""
+        try:
+            status = await self.status(agent_id)
+            return status.get("state") == "running"
+        except Exception:  # noqa: BLE001
+            return False
+
     async def stop(self, agent_id: str) -> bool:
         """Stop a running agent and drop it from the registry."""
         agent = self._agents.get(agent_id)
@@ -111,6 +129,8 @@ class AgentRuntime:
             return False
         ok = await agent.stop(agent_id)
         self._agents.pop(agent_id, None)
+        if self._health is not None:
+            self._health.unregister(agent_id)
         await self._publish(
             DomainEvent(
                 type="agent.stopped",

@@ -14,6 +14,7 @@ from typing import Optional
 from kernel.agent import BaseAgent
 from kernel.domain import Artifact, Capability, Task, Tool
 from kernel.discovery import discover_handlers
+from kernel.health import CircuitBreaker
 from kernel.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
@@ -124,10 +125,12 @@ class CapabilityExecutor:
         self,
         handlers: dict[str, Any] | None = None,
         capability_registry: "CapabilityRegistry | None" = None,
+        circuit_breaker: CircuitBreaker | None = None,
     ) -> None:
         # capability_name -> async handler(params, context) -> Any
         self._handlers: dict[str, Any] = dict(handlers or {})
         self._caps = capability_registry
+        self._cb = circuit_breaker
 
     def register_handler(self, capability: str, handler: Any) -> None:
         """Register (or override) the handler for a namespaced capability."""
@@ -183,7 +186,10 @@ class CapabilityExecutor:
         if handler is None:
             raise KeyError(f"no handler registered for capability {capability!r}")
 
-        result = await handler(params, context)
+        if self._cb is not None:
+            result = await self._cb.call(capability, handler(params, context))
+        else:
+            result = await handler(params, context)
         return self._normalize(result, capability)
 
     @staticmethod

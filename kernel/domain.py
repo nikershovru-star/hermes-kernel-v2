@@ -282,6 +282,71 @@ class SandboxViolation(BaseModel):
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+# --------------------------------------------------------------------------- #
+# Health & Recovery (ADR-021)
+# --------------------------------------------------------------------------- #
+class HealthCheck(BaseModel):
+    """Probe configuration for a component (ADR-021).
+
+    Declared in agent manifest / workflow context; enforced by HealthMonitor.
+    """
+
+    probe_type: str = "liveness"  # liveness | readiness | startup
+    interval_seconds: float = 10.0
+    timeout_seconds: float = 5.0
+    failure_threshold: int = 3  # consecutive failures → unhealthy
+    success_threshold: int = 1  # consecutive successes → healthy
+    enabled: bool = True
+
+
+class HealthStatus(str, Enum):
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"  # some probes failing, not yet critical
+    UNHEALTHY = "unhealthy"  # failure_threshold breached
+    UNKNOWN = "unknown"  # no probes yet
+
+
+class HealthRecord(BaseModel):
+    """Snapshot of a component's health at a point in time (ADR-021)."""
+
+    component_id: str  # agent_id / workflow_instance_id / plugin_id
+    component_type: str  # "agent" | "workflow" | "plugin"
+    status: HealthStatus = HealthStatus.UNKNOWN
+    last_probe_at: datetime | None = None
+    consecutive_failures: int = 0
+    consecutive_successes: int = 0
+    last_error: str | None = None
+
+
+class DeadLetterEntry(BaseModel):
+    """A failed task/event stored for replay/analysis (ADR-021)."""
+
+    entry_id: str
+    component_id: str
+    entry_type: str  # "task" | "event" | "workflow_step"
+    payload: dict[str, Any]  # serialized task / event / step
+    error: str  # failure reason
+    sandbox_violation: SandboxViolation | None = None
+    retry_count: int = 0
+    max_retries: int = 3
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    recovered_at: datetime | None = None
+
+
+class CircuitBreakerPolicy(BaseModel):
+    """Circuit breaker configuration (ADR-021)."""
+
+    failure_threshold: int = 5  # failures before OPEN
+    recovery_timeout_seconds: float = 60.0  # HALF-OPEN wait
+    success_threshold: int = 2  # successes to CLOSE from HALF-OPEN
+
+
+class CircuitBreakerState(str, Enum):
+    CLOSED = "closed"  # normal operation
+    OPEN = "open"  # failing fast, rejecting calls
+    HALF_OPEN = "half_open"  # testing if recovered
+
+
 class PluginManifest(BaseModel):
     """Declarative plugin contract (validated on construction)."""
 

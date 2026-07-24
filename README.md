@@ -3,8 +3,8 @@
 > An async-first, event-driven **AI Operating System** kernel — Clean
 > Architecture, plugin-extensible, MCP-native.
 
-**Status:** v2.5.0 · **320 passed, 3 skipped, 89% coverage** (Python 3.11+).
-All phases P0–P5 + extensions A/A2/B/C/D/E/F + ADR-007..019 + CI axis-gate delivered.
+**Status:** v2.7.0 · **377 passed, 3 skipped, 91% coverage** (Python 3.11+).
+All phases P0–P5 + extensions A/A2/B/C/D/E/F + ADR-007..021 + CI axis-gate delivered.
 
 ---
 
@@ -308,6 +308,15 @@ Decisions are recorded as ADRs:
   reverse-order compensation, human-approval PAUSE, input-mapping from prior
   steps), `kernel/planner.py` (goal→`Workflow`), `Workflow` domain model
   replaces the stub + activates dead `Task.workflow_id`. 23 tests.
+- [ADR-020 — Execution Sandbox](docs/adr/ADR-020-sandbox.md) —
+  `kernel/sandbox.py` (`Sandbox.run` soft timeout/resource enforcement,
+  `TimeoutGuard`, `ResourceMonitor` via optional `psutil`); optional integration
+  into `AgentRuntime`/`WorkflowEngine`. 17 tests.
+- [ADR-021 — Health & Recovery](docs/adr/ADR-021-health-recovery.md) —
+  `kernel/health.py` (`HealthMonitor` liveness probes, `DeadLetterQueue` for
+  failed work, `CircuitBreaker` per-capability state machine, `RecoveryEngine`
+  auto-restart/escalation); optional integration into `AgentRuntime`/
+  `WorkflowEngine`/`CapabilityExecutor` (backward-compatible). 40 tests.
 
 ---
 

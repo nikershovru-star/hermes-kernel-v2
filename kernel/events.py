@@ -292,6 +292,75 @@ class SandboxCleanupCompleted(DomainEvent):
         )
 
 
+# --------------------------------------------------------------------------- #
+# Health & Recovery events (ADR-021)
+# --------------------------------------------------------------------------- #
+class AgentUnhealthy(DomainEvent):
+    """A component's health probe crossed its failure threshold."""
+
+    def __init__(self, component_id: str, last_error: str | None, consecutive_failures: int) -> None:
+        super().__init__(
+            type="health.agent_unhealthy",
+            aggregate_id=component_id,
+            payload={"last_error": last_error, "consecutive_failures": consecutive_failures},
+        )
+
+
+class AgentRecovered(DomainEvent):
+    """A previously-unhealthy component was restarted / recovered."""
+
+    def __init__(self, component_id: str, restart_count: int) -> None:
+        super().__init__(
+            type="health.agent_recovered",
+            aggregate_id=component_id,
+            payload={"restart_count": restart_count},
+        )
+
+
+class WorkflowStalled(DomainEvent):
+    """A workflow instance stalled on a failed step (no forward progress)."""
+
+    def __init__(self, instance_id: str, failed_step_id: str, error: str) -> None:
+        super().__init__(
+            type="health.workflow_stalled",
+            aggregate_id=instance_id,
+            payload={"failed_step_id": failed_step_id, "error": error},
+        )
+
+
+class DeadLetterAppended(DomainEvent):
+    """A failed task/event/step was appended to the dead-letter queue."""
+
+    def __init__(self, entry_id: str, component_id: str, entry_type: str, retry_count: int) -> None:
+        super().__init__(
+            type="health.dead_letter_appended",
+            aggregate_id=component_id,
+            payload={"entry_id": entry_id, "entry_type": entry_type, "retry_count": retry_count},
+        )
+
+
+class DeadLetterRecovered(DomainEvent):
+    """A dead-letter entry was successfully recovered / replayed."""
+
+    def __init__(self, entry_id: str, component_id: str) -> None:
+        super().__init__(
+            type="health.dead_letter_recovered",
+            aggregate_id=component_id,
+            payload={"entry_id": entry_id},
+        )
+
+
+class CircuitBreakerTripped(DomainEvent):
+    """A circuit breaker changed state (closed / open / half_open)."""
+
+    def __init__(self, capability: str, state: str, failure_count: int) -> None:
+        super().__init__(
+            type="health.circuit_breaker_tripped",
+            aggregate_id=capability,
+            payload={"state": state, "failure_count": failure_count},
+        )
+
+
 __all__ = [
     "DomainEvent",
     "EventStore",
@@ -308,4 +377,10 @@ __all__ = [
     "WorkflowCompensating",
     "SandboxViolationEvent",
     "SandboxCleanupCompleted",
+    "AgentUnhealthy",
+    "AgentRecovered",
+    "WorkflowStalled",
+    "DeadLetterAppended",
+    "DeadLetterRecovered",
+    "CircuitBreakerTripped",
 ]
