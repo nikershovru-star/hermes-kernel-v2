@@ -1,0 +1,216 @@
+"""kernel/marketplace.py — PluginMarketplace (ADR-026).
+
+Distributed plugin discovery + install with deterministic, injectable I/O.
+
+AXIS CONTRACT: imports only ``kernel.marketplace_domain`` + ``kernel.events``
+(and ``kernel.domain`` for shared types where needed). It never imports
+``plugins/`` directly — remote packages are fetched via an injected
+``http_client`` and validated locally, so no real network dependency is
+required.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import logging
+import random
+import uuid
+from datetime import datetime, timezone
+from typing import Any, Awaitable, Callable
+
+from kernel.events import EventBus, EventStore, PluginDiscovered, PluginInstallFailed, PluginInstalled
+from kernel.marketplace_domain import (
+    CatalogEntry,
+    ClusterTopology,
+    NodeInfo,
+    PluginPackage,
+    PluginSource,
+    PluginStatus,
+)
+
+logger = logging.getLogger("hermes.kernel.marketplace")
+
+
+class PluginMarketplace:
+    """Discover, validate, install and uninstall plugin packages.
+
+    All external I/O is injected: ``http_client.get(url) -> str`` (JSON catalog),
+    ``clock() -> float/datetime``, ``rng`` for tie-breaking, ``sleep`` for
+    deterministic async delays. Falls back to in-memory when no ``store``.
+    """
+
+    def __init__(
+        self,
+        event_bus: EventBus | None = None,
+        event_store: EventStore | None = None,
+        registry: Any | None = None,
+        store: Any | None = None,
+        clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+        rng: random.Random | None = None,
+        http_client: Any | None = None,
+        sleep: Callable[..., Awaitable[None]] = asyncio.sleep,
+    ) -> None:
+        self._bus = event_bus
+        self._event_store = event_store
+        self._registry = registry
+        self._store = store
+        self._clock = clock
+        self._rng = rng or random.Random()
+        self._http = http_client
+        self._sleep = sleep
+        # in-memory caches (mirror store when no persistence)
+        self._installed: dict[str, PluginPackage] = {}
+        self._catalog: dict[str, CatalogEntry] = {}
+        self._available: dict[str, PluginPackage] = {}
+
+    # -- discovery ------------------------------------------------------- #
+    async def discover(self, source_url: str) -> list[CatalogEntry]:
+        """Fetch a remote catalog (JSON) and record entries.
+
+        The catalog JSON is a list of package dicts. Each becomes a
+        ``CatalogEntry`` + ``PluginPackage`` (status AVAILABLE) and emits
+        ``PluginDiscovered``. Requires an injected ``http_client``.
+        """
+        if self._http is None:
+            raise RuntimeError("discover requires an injected http_client")
+        raw = await self._http.get(source_url)
+        data = raw if isinstance(raw, list) else _loads(raw)
+        entries: list[CatalogEntry] = []
+        for i, item in enumerate(data):
+            pkg = PluginPackage(
+                package_id=item.get("package_id", item.get("name", f"pkg-{i}")),
+                name=item["name"],
+                version=item.get("version", "0.0.0"),
+                source=PluginSource(item.get("source", "marketplace")),
+                entrypoint=item.get("entrypoint", ""),
+                capabilities=list(item.get("capabilities", [])),
+                dependencies=list(item.get("dependencies", [])),
+                checksum=item.get("checksum"),
+                signature=item.get("signature"),
+                metadata=dict(item.get("metadata", {})),
+                status=PluginStatus.AVAILABLE,
+                created_at=self._clock(),
+            )
+            entry = CatalogEntry(
+                entry_id=uuid.uuid4().hex,
+                package_id=pkg.package_id,
+                source_url=source_url,
+                rating=float(item.get("rating", 0.0)),
+                download_count=int(item.get("download_count", 0)),
+                last_synced=self._clock(),
+            )
+            self._catalog[entry.entry_id] = entry
+            self._available[pkg.package_id] = pkg
+            if self._store is not None:
+                self._store.put_catalog_entry(entry)
+                self._store.put_package(pkg)
+            await self._emit(
+                PluginDiscovered(pkg.package_id, pkg.name, pkg.source.value, pkg.version, source_url)
+            )
+            entries.append(entry)
+        return entries
+
+    # -- validation ------------------------------------------------------ #
+    def validate_package(self, package: PluginPackage) -> tuple[bool, str]:
+        """Validate checksum (if present) and declared dependencies.
+
+        Returns ``(ok, reason)``. A present checksum must match the SHA-256 of
+        ``entrypoint``. Dependencies must be installed or available.
+        """
+        if package.checksum:
+            digest = hashlib.sha256(package.entrypoint.encode("utf-8")).hexdigest()
+            if digest != package.checksum:
+                return False, "checksum mismatch"
+        if self._store is not None:
+            installed = {p.package_id for p in self._store.list_packages()}
+            available = {e.package_id for e in self._store.list_catalog()}
+        else:
+            installed = set(self._installed.keys())
+            available = set(p.package_id for p in self._catalog.values())
+        missing = [d for d in package.dependencies if d not in installed and d not in available]
+        if missing:
+            return False, f"missing dependencies: {missing}"
+        return True, ""
+
+    # -- install / uninstall -------------------------------------------- #
+    async def install(self, package: PluginPackage) -> PluginPackage:
+        ok, reason = self.validate_package(package)
+        if not ok:
+            package.status = PluginStatus.FAILED
+            await self._emit(PluginInstallFailed(package.package_id, package.name, reason))
+            if self._store is not None:
+                self._store.put_package(package)
+            return package
+        package.status = PluginStatus.INSTALLING
+        await self._sleep(0)
+        package.status = PluginStatus.INSTALLED
+        package.installed_at = self._clock()
+        self._installed[package.package_id] = package
+        if self._store is not None:
+            self._store.put_package(package)
+        await self._emit(PluginInstalled(package.package_id, package.name, package.version, package.source.value))
+        return package
+
+    async def uninstall(self, package_id: str) -> bool:
+        removed = self._installed.pop(package_id, None)
+        if removed is None and self._store is not None:
+            removed = self._store.get_package(package_id)
+        if removed is None:
+            return False
+        if self._store is not None:
+            self._store.delete_package(package_id)
+        return True
+
+    # -- queries --------------------------------------------------------- #
+    def list_installed(self) -> list[PluginPackage]:
+        if self._store is not None:
+            return self._store.list_packages(status=PluginStatus.INSTALLED)
+        return [p for p in self._installed.values() if p.status == PluginStatus.INSTALLED]
+
+    def get_package(self, package_id: str) -> PluginPackage | None:
+        if self._store is not None:
+            return self._store.get_package(package_id)
+        return self._installed.get(package_id) or self._available.get(package_id)
+
+    def list_available(self) -> list[PluginPackage]:
+        if self._store is not None:
+            return self._store.list_catalog_packages()
+        return list(self._available.values())
+
+    # -- local registration --------------------------------------------- #
+    async def register_local(self, entrypoint: str, capabilities: list[str], name: str | None = None) -> PluginPackage:
+        pkg = PluginPackage(
+            package_id=entrypoint,
+            name=name or entrypoint.split(".")[-1],
+            version="0.0.0",
+            source=PluginSource.LOCAL,
+            entrypoint=entrypoint,
+            capabilities=list(capabilities),
+            status=PluginStatus.INSTALLED,
+            installed_at=self._clock(),
+            created_at=self._clock(),
+        )
+        self._installed[pkg.package_id] = pkg
+        if self._store is not None:
+            self._store.put_package(pkg)
+        await self._emit(PluginInstalled(pkg.package_id, pkg.name, pkg.version, pkg.source.value))
+        return pkg
+
+    # -- helpers --------------------------------------------------------- #
+    async def _emit(self, event: Any) -> None:
+        if self._bus is not None:
+            self._bus.publish(event)
+        if self._event_store is not None:
+            try:
+                await self._event_store.append(event)
+            except Exception:  # noqa: BLE001
+                pass
+
+
+def _loads(raw: Any) -> list[dict]:
+    import json
+
+    if isinstance(raw, (bytes, bytearray)):
+        raw = raw.decode("utf-8")
+    return json.loads(raw)

@@ -87,6 +87,7 @@ class AgentRuntime:
         health_monitor: HealthMonitor | None = None,
         swarm_coordinator: "SwarmCoordinator | None" = None,
         knowledge_graph: "KnowledgeGraphEngine | None" = None,
+        marketplace: "PluginMarketplace | None" = None,
     ) -> None:
         self._agents: dict[str, BaseAgent] = {}
         self._bus = bus
@@ -95,6 +96,7 @@ class AgentRuntime:
         self._health = health_monitor
         self._swarm = swarm_coordinator
         self._kg = knowledge_graph
+        self._mp = marketplace
         self._swarm_ids: dict[str, str] = {}  # agent_id -> swarm_id
         self._default_graphs: dict[str, str] = {}  # agent_id -> graph_id
 
@@ -317,6 +319,36 @@ class AgentRuntime:
         )
         g = self._kg.get_graph(graph_id)
         return [g.entities[eid] for eid in res.entities if eid in g.entities]
+
+    async def install_capability(
+        self, agent_id: str, package_id: str, capability_registry: Any | None = None
+    ) -> PluginPackage:
+        """Install a plugin package and register its capabilities.
+
+        Requires ``marketplace`` to be wired. If ``capability_registry`` is
+        provided (a ``CapabilityRegistry``), each declared capability is
+        registered as a ``Capability``. Returns the installed ``PluginPackage``.
+        """
+        if self._mp is None:
+            raise RuntimeError("AgentRuntime has no marketplace wired")
+        import uuid
+
+        from kernel.domain import Capability
+
+        pkg = self._mp.get_package(package_id)
+        if pkg is None:
+            raise ValueError(f"package '{package_id}' not found in marketplace")
+        installed = await self._mp.install(pkg)
+        if capability_registry is not None:
+            for cap_name in installed.capabilities:
+                cap = Capability(
+                    id=uuid.uuid4().hex,
+                    name=cap_name,
+                    description=f"installed from {installed.name} {installed.version}",
+                    tools=[],
+                )
+                await capability_registry.register(cap)
+        return installed
 
     async def _publish(self, event: DomainEvent) -> None:
         """Append to store + publish on bus if either is configured."""

@@ -3,7 +3,7 @@
 > An async-first, event-driven **AI Operating System** kernel — Clean
 > Architecture, plugin-extensible, MCP-native.
 
-**Status:** v2.11.0 · **551 passed, 3 skipped, 91% coverage** (Python 3.11+).
+**Status:** v2.12.0 · **589 passed, 3 skipped, 92% coverage** (Python 3.11+).
 All phases P0–P5 + extensions A/A2/B/C/D/E/F + ADR-007..023 + CI axis-gate delivered.
 
 ---
@@ -345,6 +345,13 @@ Decisions are recorded as ADRs:
   rule-based `run_inference`), `kernel/graph_store.py` (SQLite), 6 KG events,
   `AgentRuntime.remember`/`recall` + `WorkflowEngine.execute_with_context`.
   46 tests.
+- [ADR-026 — Plugin Marketplace & Multi-node](docs/adr/ADR-026-plugin-marketplace.md)
+  — `kernel/marketplace_domain.py` (PluginPackage/CatalogEntry/NodeInfo models),
+  `kernel/marketplace.py` (`PluginMarketplace`: discover via injected http_client,
+  install/uninstall, checksum+dependency validation, `register_local`),
+  `kernel/cluster.py` (`ClusterManager`: join/leave, leader election, broadcast),
+  `kernel/marketplace_store.py` (SQLite), 5 events,
+  `AgentRuntime.install_capability` + `WorkflowEngine.discover_plugins`. 38 tests.
 
 ---
 

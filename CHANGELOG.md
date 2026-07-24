@@ -4,6 +4,36 @@ All notable changes to Hermes Kernel v2 are documented here. The format is
 loosely based on [Keep a Changelog](https://keepachangelog.com/); this project
 adheres to **semantic versioning** (MAJOR.MINOR.PATCH).
 
+## [v2.12.0] — 2026-07-24 · Plugin Marketplace & Multi-node (ADR-026)
+
+### Added
+- **`kernel/marketplace_domain.py`** — isolated domain models: `PluginSource`,
+  `PluginStatus` enums; `PluginPackage`, `CatalogEntry`, `NodeInfo`,
+  `ClusterTopology`. Isolated from ADR-023 `NodeInfo` / ADR-007 `PluginRegistry`
+  (different shapes) to preserve the existing baseline.
+- **`kernel/marketplace.py`** — `PluginMarketplace` (async): `discover` (remote
+  JSON catalog via injected `http_client`), `install`/`uninstall` (status
+  transitions + events), `validate_package` (SHA-256 checksum + dependency
+  check), `list_installed`/`list_available`, `register_local`. All I/O
+  injectable (event_bus/store/registry/clock/rng/sleep/http_client). Axis:
+  `kernel.marketplace_domain` + `kernel.events` only.
+- **`kernel/cluster.py`** — `ClusterManager` (full): `join_cluster`,
+  `leave_cluster`, `get_topology`, `elect_leader` (oldest node by
+  `last_heartbeat`), `heartbeat`, `prune_timed_out`, `broadcast` (injected
+  transport).
+- **`kernel/marketplace_store.py`** — `MarketplaceStore`: in-memory + SQLite
+  (`packages` / `catalog` / `nodes` tables).
+- **5 marketplace/cluster events** (`kernel/events.py`): `PluginDiscovered`,
+  `PluginInstalled`, `PluginInstallFailed`, `NodeJoined`, `NodeLeft`.
+- **`AgentRuntime`** — `marketplace` param + `install_capability(agent_id,
+  package_id, capability_registry=…)`; **`WorkflowEngine`** — `marketplace` param
+  + `discover_plugins(capability_query)`.
+- **38 new tests** (marketplace 12, integration 10, cluster 8, store 8).
+
+### Honest Notes
+- Logical/in-proc multi-node (injected transport); oldest-node leader election
+  (not Raft); no real signing beyond SHA-256 checksum; no plugin sandboxing.
+
 ## [v2.11.0] — 2026-07-24 · Knowledge Graph & Semantic Memory (ADR-025)
 
 ### Added

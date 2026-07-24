@@ -71,6 +71,7 @@ class WorkflowEngine:
         swarm_coordinator: "SwarmCoordinator | None" = None,
         dynamic_planner: "DynamicPlanner | None" = None,
         knowledge_graph: "KnowledgeGraphEngine | None" = None,
+        marketplace: "PluginMarketplace | None" = None,
     ) -> None:
         self._agents = agent_runtime
         self._caps = capability_executor
@@ -82,6 +83,7 @@ class WorkflowEngine:
         self._swarm = swarm_coordinator
         self._planner = dynamic_planner
         self._kg = knowledge_graph
+        self._mp = marketplace
         self._instances: dict[str, WorkflowInstance] = {}
 
     # -- adaptive execution (ADR-024) ------------------------------------ #
@@ -188,6 +190,27 @@ class WorkflowEngine:
             workflow.context.setdefault("kg_matches", []).extend(matched)
         # reuse the adaptive/fallback path
         return await self.execute_adaptive(instance_id, workflow)
+
+    async def discover_plugins(self, capability_query: str) -> list[PluginPackage]:
+        """Find installed/available packages providing ``capability_query``.
+
+        Requires ``marketplace`` wired. Searches installed packages first, then
+        available catalog, matching by substring (case-insensitive) on the
+        capability name. Returns the matching ``PluginPackage`` list.
+        """
+        if self._mp is None:
+            return []
+        q = capability_query.lower()
+        candidates = self._mp.list_installed() + self._mp.list_available()
+        seen: set[str] = set()
+        matched: list[PluginPackage] = []
+        for pkg in candidates:
+            if pkg.package_id in seen:
+                continue
+            if any(q in cap.lower() for cap in pkg.capabilities):
+                seen.add(pkg.package_id)
+                matched.append(pkg)
+        return matched
 
     # -- instance lifecycle ---------------------------------------------- #
     async def start(self, workflow: Workflow, context: dict[str, Any] | None = None) -> WorkflowInstance:

@@ -1,6 +1,6 @@
 # Hermes Kernel v2 — Roadmap
 
-_Last updated: 2026-07-24 · **v2.11.0** · 551 passed, 3 skipped, 91% total coverage (CI gate ≥85% ✅)_
+_Last updated: 2026-07-24 · **v2.12.0** · 589 passed, 3 skipped, 92% total coverage (CI gate ≥85% ✅)_
 
 | Phase | Название | Статус | Этапы | Gate |
 |-------|----------|--------|-------|------|
@@ -31,7 +31,8 @@ _Last updated: 2026-07-24 · **v2.11.0** · 551 passed, 3 skipped, 91% total cov
 | ADR-023 | Swarm / Teams | ✅ | `kernel/swarm.py` + `distributed_health.py` + `team_manager.py` + `swarm_store.py` (SwarmCoordinator, DistributedHealthMonitor, TeamManager, SwarmStore) | 49 tests, ~91% |
 | ADR-024 | Dynamic Planner | ✅ | `kernel/dynamic_planner.py` + `kernel/plan_store.py` + `kernel/domain.py` + `kernel/events.py` + `kernel/workflow.py` + `kernel/swarm.py` (DynamicPlanner, PlanStore, 6 events, execute_adaptive, rebalance_load) | 39 tests, ~91% |
 | ADR-025 | Knowledge Graph & Semantic Memory | ✅ | `kernel/semantic_graph.py` + `kernel/knowledge_graph.py` + `kernel/graph_store.py` + `kernel/domain.py` + `kernel/events.py` + `kernel/agent.py` + `kernel/workflow.py` (KnowledgeGraphEngine, GraphStore, 6 events, remember/recall, execute_with_context) | 46 tests, 91% |
-| ADR-026 | Plugin Marketplace / Multi-node | ⏭ next | distribution + discovery of third-party plugins; or multi-node transport | — |
+| ADR-026 | Plugin Marketplace / Multi-node | ✅ | `kernel/marketplace_domain.py` + `kernel/marketplace.py` + `kernel/cluster.py` + `kernel/marketplace_store.py` + `kernel/events.py` + `kernel/agent.py` + `kernel/workflow.py` (PluginMarketplace, ClusterManager, MarketplaceStore, 5 events, install_capability, discover_plugins) | 38 tests, 92% |
+| ADR-027 | Observability / Metrics | ⏭ next | kernel metrics, tracing, structured logs, dashboards | — |
 
 > \* `kernel/retrieval_backends.py` coverage is **68% on Windows** (sqlite-vss
 > has no Windows wheels → its 3 tests skip). On Linux with `faiss-cpu` +

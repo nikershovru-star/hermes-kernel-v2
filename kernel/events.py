@@ -676,6 +676,62 @@ class EntityMerged(DomainEvent):
         )
 
 
+# -- plugin marketplace / multi-node (ADR-026) ------------------------- #
+class PluginDiscovered(DomainEvent):
+    """A new plugin was discovered in a (remote) catalog."""
+
+    def __init__(self, package_id: str, name: str, source: str, version: str, source_url: str) -> None:
+        super().__init__(
+            type="mp.plugin_discovered",
+            aggregate_id=package_id,
+            payload={"package_id": package_id, "name": name, "source": source, "version": version, "source_url": source_url},
+        )
+
+
+class PluginInstalled(DomainEvent):
+    """A plugin package was successfully installed."""
+
+    def __init__(self, package_id: str, name: str, version: str, source: str) -> None:
+        super().__init__(
+            type="mp.plugin_installed",
+            aggregate_id=package_id,
+            payload={"package_id": package_id, "name": name, "version": version, "source": source},
+        )
+
+
+class PluginInstallFailed(DomainEvent):
+    """A plugin installation failed."""
+
+    def __init__(self, package_id: str, name: str, reason: str) -> None:
+        super().__init__(
+            type="mp.plugin_install_failed",
+            aggregate_id=package_id,
+            payload={"package_id": package_id, "name": name, "reason": reason},
+        )
+
+
+class NodeJoined(DomainEvent):
+    """A node joined the cluster."""
+
+    def __init__(self, node_id: str, address: str, cluster_id: str, capabilities: list[str]) -> None:
+        super().__init__(
+            type="mp.node_joined",
+            aggregate_id=node_id,
+            payload={"node_id": node_id, "address": address, "cluster_id": cluster_id, "capabilities": capabilities},
+        )
+
+
+class NodeLeft(DomainEvent):
+    """A node left (or was removed from) the cluster."""
+
+    def __init__(self, node_id: str, cluster_id: str, reason: str = "") -> None:
+        super().__init__(
+            type="mp.node_left",
+            aggregate_id=node_id,
+            payload={"node_id": node_id, "cluster_id": cluster_id, "reason": reason},
+        )
+
+
 __all__ = [
     "DomainEvent",
     "EventStore",
@@ -724,4 +780,9 @@ __all__ = [
     "QueryExecuted",
     "InferenceFired",
     "EntityMerged",
+    "PluginDiscovered",
+    "PluginInstalled",
+    "PluginInstallFailed",
+    "NodeJoined",
+    "NodeLeft",
 ]

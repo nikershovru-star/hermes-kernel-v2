@@ -1,6 +1,7 @@
-"""kernel — Hermes Kernel v2 core package (ADR-007 … ADR-025).
+"""kernel — Hermes Kernel v2 core package (ADR-007 … ADR-026).
 
-Public surface for the orchestration/distributed-health/semantic-memory layers.
+Public surface for the orchestration/distributed-health/semantic-memory/
+plugin-marketplace layers.
 """
 
 from kernel.domain import ExecutionOutcome, Plan, PlanStep, ReplanTrigger, Swarm, SwarmMember
@@ -8,6 +9,17 @@ from kernel.distributed_health import DistributedHealthMonitor
 from kernel.dynamic_planner import DynamicPlanner
 from kernel.graph_store import GraphStore
 from kernel.knowledge_graph import KnowledgeGraphEngine
+from kernel.marketplace import PluginMarketplace
+from kernel.marketplace_domain import (
+    CatalogEntry,
+    ClusterTopology,
+    NodeInfo,
+    PluginPackage,
+    PluginSource,
+    PluginStatus,
+)
+from kernel.marketplace_store import MarketplaceStore
+from kernel.cluster import ClusterManager
 from kernel.plan_store import PlanStore
 from kernel.semantic_graph import Entity, GraphQuery, InferenceRule, KnowledgeGraph, QueryResult, Relation
 from kernel.swarm import SwarmCoordinator
@@ -33,4 +45,13 @@ __all__ = [
     "QueryResult",
     "InferenceRule",
     "GraphStore",
+    "PluginMarketplace",
+    "MarketplaceStore",
+    "ClusterManager",
+    "PluginPackage",
+    "PluginSource",
+    "PluginStatus",
+    "CatalogEntry",
+    "NodeInfo",
+    "ClusterTopology",
 ]
