@@ -252,6 +252,36 @@ class Artifact(BaseEntity):
 # --------------------------------------------------------------------------- #
 # Plugin manifest (declarative plugin contract)
 # --------------------------------------------------------------------------- #
+class SandboxPolicy(BaseModel):
+    """Resource + security policy for a plugin/agent/workflow (ADR-020).
+
+    Declared in ``plugin.yaml`` / agent manifest / workflow context; enforced
+    best-effort by ``kernel.sandbox.Sandbox``. Defaults are intentionally
+    permissive so the kernel runs unchanged on first adoption.
+    """
+
+    max_cpu_time_ms: int = 30_000
+    max_memory_mb: int = 512
+    max_file_size_mb: int = 100
+    max_files_open: int = 64
+    allow_network: bool = True
+    allow_subprocess: bool = False
+    timeout_seconds: float = 30.0
+    max_retries: int = 0  # sandbox-level retry (distinct from workflow retry)
+
+    def serialized(self) -> dict[str, Any]:
+        return self.model_dump()
+
+
+class SandboxViolation(BaseModel):
+    """Recorded when a ``SandboxPolicy`` is breached (ADR-020)."""
+
+    policy: SandboxPolicy
+    violation_type: str  # "timeout" | "memory" | "cpu" | "file" | "network" | "subprocess"
+    details: dict[str, Any] = Field(default_factory=dict)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
 class PluginManifest(BaseModel):
     """Declarative plugin contract (validated on construction)."""
 
@@ -260,6 +290,7 @@ class PluginManifest(BaseModel):
     capabilities: list[str] = Field(default_factory=list)  # hermes.search, ...
     entrypoint: str  # import path: module:attr
     dependencies: list[str] = Field(default_factory=list)
+    sandbox_policy: dict[str, Any] | None = None  # optional SandboxPolicy as dict (ADR-020)
 
     @property
     def plugin_id(self) -> str:

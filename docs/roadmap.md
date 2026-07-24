@@ -25,6 +25,7 @@ _Last updated: 2026-07-23 · **v2.5.0** · 320 passed, 3 skipped, 89% total cove
 | ADR-017 | Event Platform + Desktop Agent Vision | ✅ | `kernel/events.py` + `plugins/builtin/desktop_control/` | 31 tests, 88% |
 | ADR-018 | Capability Handler Auto-Discovery | ✅ | `kernel/discovery.py` + `kernel/capability.py` | 6 tests |
 | ADR-019 | Workflow Runtime Foundation | ✅ | `kernel/workflow.py` + `kernel/planner.py` + `kernel/domain.py` | 23 tests, 89% |
+| ADR-020 | Execution Sandbox | ✅ | `kernel/sandbox.py` + `kernel/domain.py` + `kernel/events.py` | 17 tests, 89% |
 
 > \* `kernel/retrieval_backends.py` coverage is **68% on Windows** (sqlite-vss
 > has no Windows wheels → its 3 tests skip). On Linux with `faiss-cpu` +

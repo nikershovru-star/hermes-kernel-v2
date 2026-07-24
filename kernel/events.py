@@ -257,6 +257,41 @@ class WorkflowCompensating(DomainEvent):
         )
 
 
+# --------------------------------------------------------------------------- #
+# Sandbox events (ADR-020)
+# --------------------------------------------------------------------------- #
+class SandboxViolationEvent(DomainEvent):
+    """A sandbox policy was breached (timeout / memory / cpu / file / ...)."""
+
+    def __init__(
+        self,
+        aggregate_id: str,
+        violation_type: str,
+        policy: dict[str, Any],
+        details: dict[str, Any],
+    ) -> None:
+        super().__init__(
+            type="sandbox.violation",
+            aggregate_id=aggregate_id,
+            payload={
+                "violation_type": violation_type,
+                "policy": policy,
+                "details": details,
+            },
+        )
+
+
+class SandboxCleanupCompleted(DomainEvent):
+    """Cleanup after a sandbox breach finished (success or failure)."""
+
+    def __init__(self, aggregate_id: str, success: bool, error: str | None) -> None:
+        super().__init__(
+            type="sandbox.cleanup_completed",
+            aggregate_id=aggregate_id,
+            payload={"success": success, "error": error},
+        )
+
+
 __all__ = [
     "DomainEvent",
     "EventStore",
@@ -271,4 +306,6 @@ __all__ = [
     "WorkflowStepFailed",
     "WorkflowStepAwaitingApproval",
     "WorkflowCompensating",
+    "SandboxViolationEvent",
+    "SandboxCleanupCompleted",
 ]

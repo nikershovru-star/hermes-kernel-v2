@@ -5,3 +5,9 @@ capabilities: [hermes.desktop]
 entrypoint: plugins.builtin.desktop_control:DesktopControlPlugin
 agent_entrypoint: plugins.builtin.desktop_control:DesktopAgent
 dependencies: [pyautogui, Pillow]
+sandbox_policy:
+  max_cpu_time_ms: 10000
+  max_memory_mb: 256
+  timeout_seconds: 10.0
+  allow_network: false
+  allow_subprocess: false

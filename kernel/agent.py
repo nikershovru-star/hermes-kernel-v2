@@ -15,8 +15,9 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
-from kernel.domain import Agent, Artifact, Task
+from kernel.domain import Agent, Artifact, SandboxPolicy, Task
 from kernel.events import DomainEvent, EventBus, EventStore
+from kernel.sandbox import Sandbox
 
 logger = logging.getLogger("hermes.kernel.agent")
 
@@ -81,10 +82,12 @@ class AgentRuntime:
         self,
         bus: EventBus | None = None,
         store: EventStore | None = None,
+        sandbox: Sandbox | None = None,
     ) -> None:
         self._agents: dict[str, BaseAgent] = {}
         self._bus = bus
         self._store = store
+        self._sandbox = sandbox
 
     async def start(self, agent: BaseAgent) -> str:
         """Start ``agent`` and register it as running. Return its agent_id."""
@@ -118,7 +121,11 @@ class AgentRuntime:
         return ok
 
     async def execute(
-        self, agent_id: str, task: Task, workflow_id: str | None = None
+        self,
+        agent_id: str,
+        task: Task,
+        workflow_id: str | None = None,
+        policy: SandboxPolicy | None = None,
     ) -> Artifact:
         """Execute ``task`` on the running agent identified by ``agent_id``.
 
@@ -131,7 +138,21 @@ class AgentRuntime:
         agent = self._agents.get(agent_id)
         if agent is None:
             raise KeyError(f"agent '{agent_id}' is not running")
-        return await agent.execute(agent_id, task)
+        if self._sandbox is None:
+            return await agent.execute(agent_id, task)
+        # Sandboxed execution: breach cancels + stops the agent (cleanup hook).
+        policy = policy or self._default_policy(agent)
+        return await self._sandbox.run(
+            agent.execute(agent_id, task),
+            policy=policy,
+            cleanup=lambda: agent.stop(agent_id),
+            context={"agent_id": agent_id, "task_id": task.id},
+        )
+
+    @staticmethod
+    def _default_policy(agent: BaseAgent) -> SandboxPolicy:
+        """Permissive default policy (ADR-020): no network/subprocess limits."""
+        return SandboxPolicy()
 
     async def status(self, agent_id: str) -> dict[str, Any]:
         """Return runtime status for a running agent."""

@@ -4,6 +4,30 @@ All notable changes to Hermes Kernel v2 are documented here. The format is
 loosely based on [Keep a Changelog](https://keepachangelog.com/); this project
 adheres to **semantic versioning** (MAJOR.MINOR.PATCH).
 
+## [v2.6.0] — 2026-07-24 · Execution Sandbox (ADR-020)
+
+### Added
+- **`kernel/sandbox.py`** — soft in-process execution sandbox:
+  - `Sandbox.run(coro, policy)` wraps any coroutine with a `SandboxPolicy`
+  - `TimeoutGuard` (real `asyncio.wait_for` + cancellation)
+  - `ResourceMonitor` (best-effort CPU/memory/fd via optional `psutil`)
+  - `SandboxError` carrying `SandboxViolation`; emits `SandboxViolationEvent`
+    + `SandboxCleanupCompleted` (reuses EventBus + EventStore, ADR-017)
+- **`kernel/domain.py`** — `SandboxPolicy`, `SandboxViolation` models
+- **`kernel/events.py`** — `SandboxViolationEvent`, `SandboxCleanupCompleted`
+- **`kernel/agent.py`** — `AgentRuntime(sandbox=...)` sandboxed `execute()`
+  (optional, backward-compatible)
+- **`kernel/workflow.py`** — `WorkflowEngine(sandbox=...)` sandboxed steps;
+  `SandboxError` routes into retry/compensation
+- **`pyproject.toml`** — optional extra `[monitor]` (`psutil>=5.9`)
+- **Tests:** `test_sandbox.py`, `test_sandbox_integration.py` (17) — total
+  **337 passed, 3 skipped, 89% total coverage**
+
+### Honest notes (deferred)
+- Soft/in-process only — no subprocess/container/seccomp isolation → ADR-024
+- CPU/mem/fd limits are best-effort sampled, not hard rlimits
+- Network/subprocess policy fields are intent flags only (no active blocking)
+
 ## [v2.5.0] — 2026-07-23 · Workflow Runtime Foundation (ADR-019)
 
 ### Added

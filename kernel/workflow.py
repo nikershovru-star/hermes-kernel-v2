@@ -18,9 +18,10 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from kernel.agent import AgentRuntime
+from kernel.agent import Agent, AgentRuntime
 from kernel.capability import CapabilityExecutor
-from kernel.domain import Agent, Artifact, Task, Workflow, WorkflowInstance, WorkflowStep, WorkflowStatus
+from kernel.domain import Artifact, SandboxPolicy, Task, Workflow, WorkflowInstance, WorkflowStep, WorkflowStatus
+from kernel.sandbox import Sandbox, SandboxError
 from kernel.events import (
     DomainEvent,
     EventBus,
@@ -44,11 +45,13 @@ class WorkflowEngine:
         capability_executor: CapabilityExecutor,
         event_bus: EventBus,
         event_store: EventStore,
+        sandbox: Sandbox | None = None,
     ) -> None:
         self._agents = agent_runtime
         self._caps = capability_executor
         self._bus = event_bus
         self._store = event_store
+        self._sandbox = sandbox
         self._instances: dict[str, WorkflowInstance] = {}
 
     # -- instance lifecycle ---------------------------------------------- #
@@ -82,6 +85,7 @@ class WorkflowEngine:
         instance: WorkflowInstance,
         workflow: Workflow,
         agent: Agent | None = None,
+        policy: SandboxPolicy | None = None,
     ) -> Artifact:
         """Execute the current step: resolve → map inputs → run → emit events.
 
@@ -109,7 +113,17 @@ class WorkflowEngine:
 
         try:
             started = time.monotonic()
-            artifact = await self._run_step(step, params, agent, instance)
+            coro = self._run_step(step, params, agent, instance)
+            if self._sandbox is None:
+                artifact = await coro
+            else:
+                policy = policy or self._resolve_policy(step, workflow)
+                artifact = await self._sandbox.run(
+                    coro,
+                    policy=policy,
+                    cleanup=lambda: self._compensate_on_breach(instance, workflow),
+                    context={"workflow_id": instance.id, "step_id": step.id},
+                )
             duration_ms = (time.monotonic() - started) * 1000.0
             instance.step_results[step.id] = artifact.id
             instance.event_log.append(artifact.id)
@@ -122,6 +136,9 @@ class WorkflowEngine:
                 instance.status = WorkflowStatus.COMPLETED
                 instance.completed_at = datetime.now(timezone.utc)
             return artifact
+        except SandboxError:
+            # sandbox breach is fatal for the step — propagate (cleanup already ran)
+            raise
         except Exception as exc:  # noqa: BLE001 - engine must handle + emit
             will_retry = attempt < step.retry_policy.max_attempts
             await self._emit(
@@ -196,6 +213,25 @@ class WorkflowEngine:
         except Exception as cexc:  # noqa: BLE001 - compensate best-effort
             logger.error("compensation %s failed: %s", comp_step_id, cexc)
 
+    # -- sandbox helpers -------------------------------------------------- #
+    def _resolve_policy(self, step: WorkflowStep, workflow: Workflow) -> SandboxPolicy:
+        """Policy precedence: explicit step policy → workflow context policy → default."""
+        if step.timeout_seconds and step.timeout_seconds < 30.0:
+            return SandboxPolicy(timeout_seconds=step.timeout_seconds)
+        wf_policy = workflow.context.get("sandbox_policy")
+        if isinstance(wf_policy, dict):
+            return SandboxPolicy(**{k: v for k, v in wf_policy.items() if k in SandboxPolicy.model_fields})
+        return SandboxPolicy()
+
+    async def _compensate_on_breach(self, instance: WorkflowInstance, workflow: Workflow) -> None:
+        """Best-effort compensation when a sandbox breach cancels a step."""
+        step = self._current_step(workflow, instance)
+        if step is not None and step.compensation:
+            try:
+                await self.compensate(instance, workflow, step.id)
+            except Exception as cexc:  # noqa: BLE001
+                logger.error("sandbox breach compensation failed: %s", cexc)
+
     # -- internals -------------------------------------------------------- #
     def _current_step(self, workflow: Workflow, instance: WorkflowInstance) -> WorkflowStep | None:
         if instance.current_step_id is None:
@@ -259,7 +295,7 @@ class WorkflowEngine:
                 workflow_id=instance.id if instance is not None else None,
             )
             # activate the previously-dead Task.workflow_id field (ADR-019)
-            return await self._agents.execute(agent.id, task, workflow_id=task.workflow_id)
+            return await self._agents.execute(agent.agent_id, task, workflow_id=task.workflow_id)
         return await self._caps.execute(step.capability, params)
 
     async def _emit(self, event: DomainEvent) -> None:
