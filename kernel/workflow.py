@@ -59,6 +59,7 @@ class WorkflowEngine:
         sandbox: Sandbox | None = None,
         health_monitor: HealthMonitor | None = None,
         dead_letter: DeadLetterQueue | None = None,
+        swarm_coordinator: "SwarmCoordinator | None" = None,
     ) -> None:
         self._agents = agent_runtime
         self._caps = capability_executor
@@ -67,6 +68,7 @@ class WorkflowEngine:
         self._sandbox = sandbox
         self._health = health_monitor
         self._dlq = dead_letter
+        self._swarm = swarm_coordinator
         self._instances: dict[str, WorkflowInstance] = {}
 
     # -- instance lifecycle ---------------------------------------------- #
@@ -93,6 +95,30 @@ class WorkflowEngine:
 
     async def get_status(self, instance_id: str) -> WorkflowInstance:
         return self.get_instance(instance_id)
+
+    # -- swarm-aware scheduling (ADR-023) -- #
+    def schedule_swarm(self, swarm_id: str, tasks: list[Task], from_agent: str) -> list:
+        """Delegate a batch of tasks to swarm members via the coordinator.
+
+        Requires a ``swarm_coordinator`` (otherwise raises RuntimeError). Each
+        task is matched to an eligible member (capability-aware, lowest-load,
+        round-robin) and a ``TaskDelegation`` is returned. The local execution
+        path of ``execute_step`` is untouched — this is an alternative entry point
+        the WorkflowEngine exposes for distributed orchestration.
+        """
+        if self._swarm is None:
+            raise RuntimeError("no swarm_coordinator configured")
+        return [self._swarm.delegate_task(swarm_id, t, from_agent) for t in tasks]
+
+    async def execute_step_swarm(self, swarm_id: str, instance: WorkflowInstance, workflow: Workflow, from_agent: str) -> Artifact:
+        """Like ``execute_step`` but routes the current step to a swarm member."""
+        delegation = self.schedule_swarm(swarm_id, [self._current_step_task(instance, workflow)], from_agent)[0]
+        self._swarm.complete_delegation(delegation.delegation_id, result_summary="swarm step")
+        return Artifact(type="task", content={"delegated_to": delegation.to_agent, "task_id": delegation.task_id}, format="json")
+
+    def _current_step_task(self, instance: WorkflowInstance, workflow: Workflow) -> Task:
+        step = self._current_step(workflow, instance)
+        return Task(name=step.id, capability=step.capability)
 
     # -- step execution --------------------------------------------------- #
     async def execute_step(

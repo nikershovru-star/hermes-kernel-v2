@@ -442,6 +442,102 @@ class ReadingProgress(DomainEvent):
         )
 
 
+# --------------------------------------------------------------------------- #
+# Swarm / Teams events (ADR-023)
+# --------------------------------------------------------------------------- #
+class AgentJoinedSwarm(DomainEvent):
+    """An agent joined a swarm."""
+
+    def __init__(self, swarm_id: str, agent_id: str, node_id: str, role: str, capabilities: list[str]) -> None:
+        super().__init__(
+            type="swarm.agent_joined",
+            aggregate_id=swarm_id,
+            payload={"agent_id": agent_id, "node_id": node_id, "role": role, "capabilities": capabilities},
+        )
+
+
+class AgentLeftSwarm(DomainEvent):
+    """An agent left a swarm (graceful / timeout / failure)."""
+
+    def __init__(self, swarm_id: str, agent_id: str, reason: str) -> None:
+        super().__init__(
+            type="swarm.agent_left",
+            aggregate_id=swarm_id,
+            payload={"agent_id": agent_id, "reason": reason},
+        )
+
+
+class HeartbeatReceived(DomainEvent):
+    """A heartbeat arrived from a node/agent."""
+
+    def __init__(self, node_id: str, agent_id: str, timestamp: float, load_score: float) -> None:
+        super().__init__(
+            type="swarm.heartbeat_received",
+            aggregate_id=node_id,
+            payload={"agent_id": agent_id, "timestamp": timestamp, "load_score": load_score},
+        )
+
+
+class HeartbeatMissed(DomainEvent):
+    """A node/agent missed one or more expected heartbeats."""
+
+    def __init__(self, node_id: str, agent_id: str, missed_count: int, suspicion_level: str) -> None:
+        super().__init__(
+            type="swarm.heartbeat_missed",
+            aggregate_id=node_id,
+            payload={"agent_id": agent_id, "missed_count": missed_count, "suspicion_level": suspicion_level},
+        )
+
+
+class LeaderElected(DomainEvent):
+    """A new leader was elected for a swarm (bully algorithm)."""
+
+    def __init__(self, swarm_id: str, leader_id: str, previous_leader_id: str | None, algorithm: str = "bully") -> None:
+        super().__init__(
+            type="swarm.leader_elected",
+            aggregate_id=swarm_id,
+            payload={"leader_id": leader_id, "previous_leader_id": previous_leader_id, "algorithm": algorithm},
+        )
+
+
+class TaskDelegated(DomainEvent):
+    """A task was delegated from one agent to another within a swarm."""
+
+    def __init__(self, delegation_id: str, task_id: str, from_agent: str, to_agent: str, swarm_id: str) -> None:
+        super().__init__(
+            type="swarm.task_delegated",
+            aggregate_id=swarm_id,
+            payload={
+                "delegation_id": delegation_id,
+                "task_id": task_id,
+                "from_agent": from_agent,
+                "to_agent": to_agent,
+            },
+        )
+
+
+class TaskCompleted(DomainEvent):
+    """A delegated task finished."""
+
+    def __init__(self, delegation_id: str, task_id: str, result_summary: str) -> None:
+        super().__init__(
+            type="swarm.task_completed",
+            aggregate_id=delegation_id,
+            payload={"task_id": task_id, "result_summary": result_summary},
+        )
+
+
+class NodePartitioned(DomainEvent):
+    """A node was partitioned (declared unreachable/unhealthy)."""
+
+    def __init__(self, node_id: str, partition_reason: str, affected_agents: list[str]) -> None:
+        super().__init__(
+            type="swarm.node_partitioned",
+            aggregate_id=node_id,
+            payload={"partition_reason": partition_reason, "affected_agents": affected_agents},
+        )
+
+
 __all__ = [
     "DomainEvent",
     "EventStore",
@@ -470,4 +566,12 @@ __all__ = [
     "TextTyped",
     "GazeFixated",
     "ReadingProgress",
+    "AgentJoinedSwarm",
+    "AgentLeftSwarm",
+    "HeartbeatReceived",
+    "HeartbeatMissed",
+    "LeaderElected",
+    "TaskDelegated",
+    "TaskCompleted",
+    "NodePartitioned",
 ]

@@ -4,6 +4,54 @@ All notable changes to Hermes Kernel v2 are documented here. The format is
 loosely based on [Keep a Changelog](https://keepachangelog.com/); this project
 adheres to **semantic versioning** (MAJOR.MINOR.PATCH).
 
+## [v2.9.0] — 2026-07-24 · Swarm / Teams (ADR-023)
+
+### Added
+- **`kernel/swarm.py`** — `SwarmCoordinator` (async): create/join/leave,
+  Bully leader election (healthy member with highest lexicographic `agent_id`;
+  `LeaderElected` emitted on leader change), heartbeat tracking + load scores,
+  `check_partitions` (suspected past `suspicion_timeout_ms`=3s, unhealthy past
+  `failure_timeout_ms`=10s, emits `HeartbeatMissed`/`NodePartitioned`,
+  re-elects on leader loss), capability-aware least-load delegation with
+  round-robin tie-break (`TaskDelegated`). All timers injectable (clock/sleep/
+  rng) for deterministic tests.
+- **`kernel/distributed_health.py`** — `DistributedHealthMonitor`: periodic
+  `HeartbeatReceived` emission, remote node health via injectable clock;
+  composes with `HealthMonitor` (ADR-021).
+- **`kernel/team_manager.py`** — `TeamManager`: high-level facade —
+  `create_team`, `assign_role`, `disband_team`, `execute_distributed` (batches
+  tasks across swarm members, injectable executor).
+- **`kernel/swarm_store.py`** — `SwarmStore`: in-memory CRUD + optional SQLite
+  (`swarms`, `delegations` tables), mirroring ADR-022 `HumanProfileStore`.
+- **`kernel/domain.py`** — `SwarmTopology`, `SwarmMember`, `Swarm`, `NodeInfo`,
+  `TaskDelegation`.
+- **`kernel/events.py`** — 8 swarm events: `AgentJoinedSwarm`, `AgentLeftSwarm`,
+  `HeartbeatReceived`, `HeartbeatMissed`, `LeaderElected`, `TaskDelegated`,
+  `TaskCompleted`, `NodePartitioned` (using the `super().__init__(type=…)`
+  convention).
+- **Optional integration (backward-compatible, all default `None`):**
+  - `AgentRuntime(swarm_coordinator=…)` + `join_swarm`/`leave_swarm`; `execute`
+    delegates when the capability is missing locally.
+  - `WorkflowEngine(swarm_coordinator=…)` + `schedule_swarm`/`execute_step_swarm`.
+  - `CapabilityExecutor.discover_remote(swarm_id, coordinator)` — unique healthy
+    member capabilities.
+- **`kernel/__init__.py`** — exports `SwarmCoordinator`, `TeamManager`,
+  `DistributedHealthMonitor`, `Swarm`, `SwarmMember`.
+
+### Honest notes (deferred)
+- **Bully, not Raft/Paxos** — simple, deterministic, but not partition-resilient
+  across *real* separate nodes (only logical in-proc nodes here).
+- **Timeout suspicion, not Phi-accrual** — coarse binary thresholds.
+- **Logical multi-node only** — "distributed" means in-proc EventBus routing;
+  no TCP/gRPC transport yet.
+- **No consensus for state mutation** — EventBus eventual consistency; split-brain
+  possible if a partition heals without explicit reconciliation.
+- **Round-robin + capability filter**, not weighted least-connections.
+- **No automatic task migration** on worker failure — the delegator must retry.
+- **Swarm state persistence is local SQLite only** (no cloud sync).
+- `HeartbeatMissed`/`NodePartitioned` are keyed on `node_id` (not `swarm_id`), so
+  subscribers/replay must query by node aggregate.
+
 ## [v2.8.0] — 2026-07-24 · Behavior Engine (ADR-022)
 
 ### Added

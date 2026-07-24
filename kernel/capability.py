@@ -215,5 +215,25 @@ class CapabilityExecutor:
         artifact.provenance = artifact.provenance + [f"cap:{capability}"]
         return artifact
 
+    # -- swarm / remote discovery (ADR-023) -- #
+    def discover_remote(self, swarm_id: str, coordinator: "SwarmCoordinator | None" = None) -> list[str]:
+        """Aggregate unique capabilities from all healthy swarm members.
+
+        ``coordinator`` is accepted explicitly; if ``self`` was constructed with a
+        bound coordinator that is preferred. Returns an empty list when no
+        coordinator / swarm / healthy members are available.
+        """
+        coord = coordinator  # may be None; callers pass the active coordinator
+        if coord is None:
+            return []
+        swarm = coord.get_swarm(swarm_id)
+        if swarm is None:
+            return []
+        caps: set[str] = set()
+        for member in swarm.members.values():
+            if member.health in ("healthy", "suspected"):
+                caps.update(member.capabilities)
+        return sorted(caps)
+
 
 __all__ = ["CapabilityRegistry", "CapabilityExecutor", "discover_handlers"]

@@ -407,6 +407,58 @@ class HumanBehaviorProfile(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+# --------------------------------------------------------------------------- #
+# Swarm / Teams (ADR-023) — multi-agent orchestration + distributed health
+# --------------------------------------------------------------------------- #
+class SwarmTopology(str, Enum):
+    LEADER_WORKER = "leader_worker"
+    MESH = "mesh"
+
+
+class SwarmMember(BaseModel):
+    """One agent participating in a swarm (ADR-023)."""
+
+    agent_id: str
+    node_id: str
+    role: str = "worker"  # "leader" | "worker" | "observer"
+    health: str = "healthy"  # "healthy" | "suspected" | "unhealthy"
+    last_heartbeat: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    capabilities: list[str] = Field(default_factory=list)
+
+
+class Swarm(BaseModel):
+    """A group of agents cooperating under a topology (ADR-023)."""
+
+    swarm_id: str
+    topology: SwarmTopology = SwarmTopology.LEADER_WORKER
+    members: dict[str, SwarmMember] = Field(default_factory=dict)  # agent_id -> member
+    leader_id: str | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class NodeInfo(BaseModel):
+    """A logical node in the (in-proc) distributed topology (ADR-023)."""
+
+    node_id: str
+    address: str = "inproc"  # logical address; real TCP/gRPC is future work
+    capabilities: list[str] = Field(default_factory=list)
+    load_score: float = 0.0  # 0.0 (idle) .. 1.0 (saturated)
+    last_seen: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class TaskDelegation(BaseModel):
+    """Record of a task handed from one agent to another (ADR-023)."""
+
+    delegation_id: str
+    task_id: str
+    from_agent: str
+    to_agent: str
+    swarm_id: str
+    status: str = "pending"  # "pending" | "running" | "completed" | "failed"
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
 class PluginManifest(BaseModel):
     """Declarative plugin contract (validated on construction)."""
 

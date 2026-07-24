@@ -85,12 +85,15 @@ class AgentRuntime:
         store: EventStore | None = None,
         sandbox: Sandbox | None = None,
         health_monitor: HealthMonitor | None = None,
+        swarm_coordinator: "SwarmCoordinator | None" = None,
     ) -> None:
         self._agents: dict[str, BaseAgent] = {}
         self._bus = bus
         self._store = store
         self._sandbox = sandbox
         self._health = health_monitor
+        self._swarm = swarm_coordinator
+        self._swarm_ids: dict[str, str] = {}  # agent_id -> swarm_id
 
     async def start(self, agent: BaseAgent) -> str:
         """Start ``agent`` and register it as running. Return its agent_id."""
@@ -158,6 +161,33 @@ class AgentRuntime:
         agent = self._agents.get(agent_id)
         if agent is None:
             raise KeyError(f"agent '{agent_id}' is not running")
+        # Swarm delegation: if the local agent lacks this capability and a
+        # coordinator is wired, hand the task to an eligible swarm member.
+        # Falls back to local execution otherwise (backward compatible).
+        if (
+            self._swarm is not None
+            and task.capability is not None
+            and task.capability not in getattr(agent, "capabilities", [])
+        ):
+            swarm_id = self._swarm_ids.get(agent_id)
+            if swarm_id is not None:
+                try:
+                    delegation = self._swarm.delegate_task(swarm_id, task, agent_id)
+                    member = self._swarm.get_swarm(swarm_id)
+                    target = member.members.get(delegation.to_agent) if member else None
+                    if target is not None:
+                        self._swarm.complete_delegation(
+                            delegation.delegation_id,
+                            result_summary=f"delegated from {agent_id}",
+                        )
+                        return Artifact(
+                            type="task",
+                            content={"delegated_to": delegation.to_agent, "task_id": task.id},
+                            format="json",
+                        )
+                except (KeyError, ValueError):
+                    # no eligible member → fall through to local execution
+                    pass
         if self._sandbox is None:
             return await agent.execute(agent_id, task)
         # Sandboxed execution: breach cancels + stops the agent (cleanup hook).
@@ -173,6 +203,29 @@ class AgentRuntime:
     def _default_policy(agent: BaseAgent) -> SandboxPolicy:
         """Permissive default policy (ADR-020): no network/subprocess limits."""
         return SandboxPolicy()
+
+    # -- swarm integration (ADR-023) -- #
+    async def join_swarm(self, agent_id: str, swarm_id: str, role: str = "worker") -> None:
+        """Register this running agent with a swarm via the coordinator (optional)."""
+        if self._swarm is None:
+            raise RuntimeError("no swarm_coordinator configured")
+        agent = self._agents.get(agent_id)
+        if agent is None:
+            raise KeyError(f"agent '{agent_id}' is not running")
+        caps = list(getattr(agent, "capabilities", []))
+        node_id = f"node-{agent_id}"
+        await self._swarm.join_swarm(swarm_id, agent_id, node_id, role=role, capabilities=caps)
+        self._swarm_ids[agent_id] = swarm_id
+
+    async def leave_swarm(self, agent_id: str, reason: str = "graceful") -> None:
+        """Leave the swarm this agent belongs to (optional coordinator)."""
+        if self._swarm is None:
+            raise RuntimeError("no swarm_coordinator configured")
+        swarm_id = self._swarm_ids.get(agent_id)
+        if swarm_id is None:
+            return
+        await self._swarm.leave_swarm(swarm_id, agent_id, reason=reason)
+        self._swarm_ids.pop(agent_id, None)
 
     async def status(self, agent_id: str) -> dict[str, Any]:
         """Return runtime status for a running agent."""

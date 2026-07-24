@@ -3,8 +3,8 @@
 > An async-first, event-driven **AI Operating System** kernel — Clean
 > Architecture, plugin-extensible, MCP-native.
 
-**Status:** v2.8.0 · **412 passed, 3 skipped, 91% coverage** (Python 3.11+).
-All phases P0–P5 + extensions A/A2/B/C/D/E/F + ADR-007..022 + CI axis-gate delivered.
+**Status:** v2.9.0 · **461 passed, 3 skipped, 91% coverage** (Python 3.11+).
+All phases P0–P5 + extensions A/A2/B/C/D/E/F + ADR-007..023 + CI axis-gate delivered.
 
 ---
 
@@ -324,6 +324,14 @@ Decisions are recorded as ADRs:
   (`HumanProfileStore` CRUD + SQLite); optional integration into `DesktopAgent`
   (`desktop.click/type/scroll/read`), `UIElement.center*` for targeting.
   35 tests.
+- [ADR-023 — Swarm / Teams](docs/adr/ADR-023-swarm-teams.md) — multi-agent
+  orchestration + distributed health: `kernel/swarm.py` (`SwarmCoordinator`:
+  create/join/leave, Bully leader election, heartbeat + suspicion/failure,
+  capability-aware least-load delegation), `kernel/distributed_health.py`
+  (`DistributedHealthMonitor`), `kernel/team_manager.py` (`TeamManager`),
+  `kernel/swarm_store.py` (`SwarmStore` in-memory + SQLite); 8 swarm events;
+  optional backward-compatible integration into `AgentRuntime`/
+  `WorkflowEngine`/`CapabilityExecutor`. 49 tests.
 
 ---
 

@@ -1,6 +1,6 @@
 # Hermes Kernel v2 — Roadmap
 
-_Last updated: 2026-07-23 · **v2.5.0** · 320 passed, 3 skipped, 89% total coverage (CI gate ≥85% ✅)_
+_Last updated: 2026-07-24 · **v2.9.0** · 461 passed, 3 skipped, 91% total coverage (CI gate ≥85% ✅)_
 
 | Phase | Название | Статус | Этапы | Gate |
 |-------|----------|--------|-------|------|
@@ -28,7 +28,8 @@ _Last updated: 2026-07-23 · **v2.5.0** · 320 passed, 3 skipped, 89% total cove
 | ADR-020 | Execution Sandbox | ✅ | `kernel/sandbox.py` + `kernel/domain.py` + `kernel/events.py` | 17 tests, 89% |
 | ADR-021 | Health & Recovery | ✅ | `kernel/health.py` (HealthMonitor, DeadLetterQueue, CircuitBreaker, RecoveryEngine) | 40 tests, 96% |
 | ADR-022 | Behavior Engine | ✅ | `plugins/builtin/desktop_control/behavior.py` + `human_profile.py` (BehaviorEngine, HumanProfileStore) | 35 tests, 95% |
-| ADR-023 | Swarm / Teams | ⏭ next | distributed health, multi-node orchestration | — |
+| ADR-023 | Swarm / Teams | ✅ | `kernel/swarm.py` + `distributed_health.py` + `team_manager.py` + `swarm_store.py` (SwarmCoordinator, DistributedHealthMonitor, TeamManager, SwarmStore) | 49 tests, ~91% |
+| ADR-024 | Dynamic Planner | ⏭ next | `kernel/planner.py` adaptive re-planning | — |
 
 > \* `kernel/retrieval_backends.py` coverage is **68% on Windows** (sqlite-vss
 > has no Windows wheels → its 3 tests skip). On Linux with `faiss-cpu` +
