@@ -607,6 +607,75 @@ class RiskEscalated(DomainEvent):
         )
 
 
+# --------------------------------------------------------------------------- #
+# ADR-025 — Knowledge Graph & Semantic Memory
+# --------------------------------------------------------------------------- #
+class EntityDiscovered(DomainEvent):
+    """A new entity was discovered/added to a knowledge graph."""
+
+    def __init__(self, graph_id: str, entity_id: str, name: str, type: str, source: str, confidence: float) -> None:
+        super().__init__(
+            type="kg.entity_discovered",
+            aggregate_id=graph_id,
+            payload={"graph_id": graph_id, "entity_id": entity_id, "name": name, "type": type, "source": source, "confidence": confidence},
+        )
+
+
+class RelationCreated(DomainEvent):
+    """A relation was created between two entities."""
+
+    def __init__(self, graph_id: str, relation_id: str, source_id: str, target_id: str, type: str, weight: float) -> None:
+        super().__init__(
+            type="kg.relation_created",
+            aggregate_id=graph_id,
+            payload={"graph_id": graph_id, "relation_id": relation_id, "source_id": source_id, "target_id": target_id, "type": type, "weight": weight},
+        )
+
+
+class GraphUpdated(DomainEvent):
+    """A knowledge graph was mutated (entity/relation added/merged/deleted)."""
+
+    def __init__(self, graph_id: str, version: int, change_summary: str) -> None:
+        super().__init__(
+            type="kg.graph_updated",
+            aggregate_id=graph_id,
+            payload={"graph_id": graph_id, "version": version, "change_summary": change_summary},
+        )
+
+
+class QueryExecuted(DomainEvent):
+    """A graph query was executed."""
+
+    def __init__(self, query_id: str, graph_id: str, query_type: str, result_count: int, duration_ms: int) -> None:
+        super().__init__(
+            type="kg.query_executed",
+            aggregate_id=graph_id,
+            payload={"query_id": query_id, "graph_id": graph_id, "query_type": query_type, "result_count": result_count, "duration_ms": duration_ms},
+        )
+
+
+class InferenceFired(DomainEvent):
+    """An inference rule matched and fired over the graph."""
+
+    def __init__(self, graph_id: str, rule_id: str, matched_entities: list[str], action_taken: str) -> None:
+        super().__init__(
+            type="kg.inference_fired",
+            aggregate_id=graph_id,
+            payload={"graph_id": graph_id, "rule_id": rule_id, "matched_entities": matched_entities, "action_taken": action_taken},
+        )
+
+
+class EntityMerged(DomainEvent):
+    """Two or more entities were merged into a canonical entity."""
+
+    def __init__(self, graph_id: str, canonical_id: str, merged_ids: list[str], reason: str) -> None:
+        super().__init__(
+            type="kg.entity_merged",
+            aggregate_id=graph_id,
+            payload={"graph_id": graph_id, "canonical_id": canonical_id, "merged_ids": merged_ids, "reason": reason},
+        )
+
+
 __all__ = [
     "DomainEvent",
     "EventStore",
@@ -649,4 +718,10 @@ __all__ = [
     "PlanAdapted",
     "StepExecuted",
     "RiskEscalated",
+    "EntityDiscovered",
+    "RelationCreated",
+    "GraphUpdated",
+    "QueryExecuted",
+    "InferenceFired",
+    "EntityMerged",
 ]

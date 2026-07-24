@@ -3,7 +3,7 @@
 > An async-first, event-driven **AI Operating System** kernel — Clean
 > Architecture, plugin-extensible, MCP-native.
 
-**Status:** v2.10.0 · **504 passed, 3 skipped, 91% coverage** (Python 3.11+).
+**Status:** v2.11.0 · **551 passed, 3 skipped, 91% coverage** (Python 3.11+).
 All phases P0–P5 + extensions A/A2/B/C/D/E/F + ADR-007..023 + CI axis-gate delivered.
 
 ---
@@ -338,6 +338,13 @@ Decisions are recorded as ADRs:
   replan for 5 triggers + optional LLM shim, `risk_assess`), `kernel/plan_store.py`
   (`PlanStore` in-memory + SQLite), 6 planner events, `WorkflowEngine.execute_adaptive`
   + `SwarmCoordinator.rebalance_load`. 39 tests.
+- [ADR-025 — Knowledge Graph & Semantic Memory](docs/adr/ADR-025-knowledge-graph.md)
+  — semantic memory: `kernel/semantic_graph.py` (Entity/Relation/KnowledgeGraph
+  models), `kernel/knowledge_graph.py` (`KnowledgeGraphEngine`: entities,
+  relations, neighbor/path queries, `similar` via injected embedding or Jaccard,
+  rule-based `run_inference`), `kernel/graph_store.py` (SQLite), 6 KG events,
+  `AgentRuntime.remember`/`recall` + `WorkflowEngine.execute_with_context`.
+  46 tests.
 
 ---
 

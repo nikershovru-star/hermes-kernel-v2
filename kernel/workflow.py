@@ -70,6 +70,7 @@ class WorkflowEngine:
         dead_letter: DeadLetterQueue | None = None,
         swarm_coordinator: "SwarmCoordinator | None" = None,
         dynamic_planner: "DynamicPlanner | None" = None,
+        knowledge_graph: "KnowledgeGraphEngine | None" = None,
     ) -> None:
         self._agents = agent_runtime
         self._caps = capability_executor
@@ -80,6 +81,7 @@ class WorkflowEngine:
         self._dlq = dead_letter
         self._swarm = swarm_coordinator
         self._planner = dynamic_planner
+        self._kg = knowledge_graph
         self._instances: dict[str, WorkflowInstance] = {}
 
     # -- adaptive execution (ADR-024) ------------------------------------ #
@@ -158,6 +160,34 @@ class WorkflowEngine:
             trigger,
         )
         return plan
+
+    async def execute_with_context(
+        self, instance_id: str, workflow: Workflow, context_graph_id: str | None = None
+    ) -> list[Artifact]:
+        """Execute a workflow, first stamping KG entity_ids matching workflow keywords.
+
+        Before running, queries the configured ``knowledge_graph`` (or the graph
+        given by ``context_graph_id``) for entities whose name matches any
+        workflow step capability/name token, and records the matched entity_ids
+        into ``workflow.context["kg_matches"]``. Then delegates to
+        ``execute_adaptive`` (falling back to legacy ``execute_step`` when no
+        planner is wired). If no knowledge graph is configured, runs unchanged.
+        """
+        if self._kg is not None and context_graph_id is not None:
+            matched: list[str] = []
+            from kernel.semantic_graph import GraphQuery
+
+            keywords = " ".join(
+                [workflow.name] + [s.capability for s in workflow.steps] + [s.name for s in workflow.steps]
+            ).lower()
+            g = self._kg.get_graph(context_graph_id)
+            if g is not None:
+                for e in g.entities.values():
+                    if e.name.lower() in keywords or any(tok in e.name.lower() for tok in keywords.split()):
+                        matched.append(e.entity_id)
+            workflow.context.setdefault("kg_matches", []).extend(matched)
+        # reuse the adaptive/fallback path
+        return await self.execute_adaptive(instance_id, workflow)
 
     # -- instance lifecycle ---------------------------------------------- #
     async def start(self, workflow: Workflow, context: dict[str, Any] | None = None) -> WorkflowInstance:

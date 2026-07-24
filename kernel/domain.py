@@ -579,6 +579,7 @@ class PlanStep(BaseModel):
     estimated_duration_ms: int = 1000
     risk: RiskLevel = RiskLevel.LOW
     retry_budget: int = 3
+    context_graph_id: str | None = None
 
 
 class Plan(BaseModel):

@@ -86,6 +86,7 @@ class AgentRuntime:
         sandbox: Sandbox | None = None,
         health_monitor: HealthMonitor | None = None,
         swarm_coordinator: "SwarmCoordinator | None" = None,
+        knowledge_graph: "KnowledgeGraphEngine | None" = None,
     ) -> None:
         self._agents: dict[str, BaseAgent] = {}
         self._bus = bus
@@ -93,7 +94,9 @@ class AgentRuntime:
         self._sandbox = sandbox
         self._health = health_monitor
         self._swarm = swarm_coordinator
+        self._kg = knowledge_graph
         self._swarm_ids: dict[str, str] = {}  # agent_id -> swarm_id
+        self._default_graphs: dict[str, str] = {}  # agent_id -> graph_id
 
     async def start(self, agent: BaseAgent) -> str:
         """Start ``agent`` and register it as running. Return its agent_id."""
@@ -242,6 +245,78 @@ class AgentRuntime:
         """List agent_ids of all currently running agents."""
         return list(self._agents.keys())
 
+    # -- semantic memory (ADR-025) -------------------------------------- #
+    async def remember(self, agent_id: str, fact: dict) -> "Entity":
+        """Store a fact as an Entity (+ optional Relation) in the agent's graph.
+
+        ``fact`` may contain: ``name``, ``type`` (EntityType value), ``properties``,
+        ``source``, ``confidence``, and an optional ``relation`` dict
+        (``{target: str, type: str}``) linking to another named entity.
+        Returns the stored/merged Entity.
+        """
+        if self._kg is None:
+            raise RuntimeError("AgentRuntime has no knowledge_graph wired")
+        import uuid
+
+        from kernel.semantic_graph import Entity, EntityType, Relation, RelationType
+
+        graph_id = self._default_graphs.get(agent_id)
+        if graph_id is None:
+            g = await self._kg.create_graph(f"agent:{agent_id}")
+            graph_id = g.graph_id
+            self._default_graphs[agent_id] = graph_id
+        ent = Entity(
+            entity_id=uuid.uuid4().hex,
+            name=fact["name"],
+            type=EntityType(fact.get("type", "custom")),
+            properties=fact.get("properties", {}),
+            source=fact.get("source", "agent"),
+            confidence=float(fact.get("confidence", 1.0)),
+        )
+        stored = await self._kg.add_entity(graph_id, ent)
+        rel = fact.get("relation")
+        if rel:
+            target_name = rel.get("target")
+            target_type = rel.get("type")
+            target_ent = None
+            g = self._kg.get_graph(graph_id)
+            for e in g.entities.values():
+                if e.name.lower() == str(target_name).lower():
+                    target_ent = e
+                    break
+            if target_ent is None:
+                target_ent = await self._kg.add_entity(
+                    graph_id,
+                    Entity(entity_id=uuid.uuid4().hex, name=str(target_name), type=EntityType(target_type or "custom")),
+                )
+            await self._kg.add_relation(
+                graph_id,
+                Relation(
+                    relation_id=uuid.uuid4().hex,
+                    source_id=stored.entity_id,
+                    target_id=target_ent.entity_id,
+                    type=RelationType(rel.get("relation_type", "knows")),
+                ),
+            )
+        return stored
+
+    async def recall(self, agent_id: str, query: str) -> list["Entity"]:
+        """Query the agent's graph by entity name (case-insensitive substring)."""
+        if self._kg is None:
+            return []
+        graph_id = self._default_graphs.get(agent_id)
+        if graph_id is None:
+            return []
+        import uuid
+
+        from kernel.semantic_graph import GraphQuery
+
+        res = await self._kg.query(
+            graph_id,
+            GraphQuery(query_id=uuid.uuid4().hex, graph_id=graph_id, query_type="entity_by_name", parameters={"name": query}),
+        )
+        g = self._kg.get_graph(graph_id)
+        return [g.entities[eid] for eid in res.entities if eid in g.entities]
 
     async def _publish(self, event: DomainEvent) -> None:
         """Append to store + publish on bus if either is configured."""
@@ -249,5 +324,3 @@ class AgentRuntime:
             await self._store.append(event)
         if self._bus is not None:
             self._bus.publish(event)
-
-__all__ = ["BaseAgent", "AgentRuntime"]

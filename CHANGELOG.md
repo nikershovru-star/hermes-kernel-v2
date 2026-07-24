@@ -4,6 +4,40 @@ All notable changes to Hermes Kernel v2 are documented here. The format is
 loosely based on [Keep a Changelog](https://keepachangelog.com/); this project
 adheres to **semantic versioning** (MAJOR.MINOR.PATCH).
 
+## [v2.11.0] — 2026-07-24 · Knowledge Graph & Semantic Memory (ADR-025)
+
+### Added
+- **`kernel/semantic_graph.py`** — semantic-memory domain models: `EntityType`,
+  `RelationType` enums; `Entity`, `Relation`, `KnowledgeGraph`, `GraphQuery`,
+  `InferenceRule`, `QueryResult`. Isolated from ADR-004's `Entity`/`Relation`/
+  `KnowledgeGraph` (different shapes) to preserve the existing baseline.
+- **`kernel/knowledge_graph.py`** — `KnowledgeGraphEngine` (async): `create_graph`,
+  `add_entity` (case-insensitive name dedupe → merge + confidence bump),
+  `add_relation` (endpoint validation), `get_neighbors` (depth-1, optional
+  `relation_type` filter), `find_path` (BFS shortest path), `query` (dispatch:
+  `entity_by_name` / `neighbors` / `path` / `similar` [injected embedding_fn or
+  Jaccard fallback] / `inference`), `run_inference` (rule pattern match →
+  `create_relation` / `merge_entities` / `raise_alert`, bounded `max_iterations=3`),
+  `merge_entities`, `delete_graph`. All `event_bus`/`event_store`/`embedding_fn`/
+  `clock`/`sleep`/`rng` injectable for determinism. Axis: `kernel.semantic_graph`
+  + `kernel.events` only.
+- **`kernel/graph_store.py`** — `GraphStore`: in-memory CRUD + optional SQLite
+  (`graphs` / `entities` / `relations` tables), `delete_graph` cascades.
+- **6 KG events** (`kernel/events.py`): `EntityDiscovered`, `RelationCreated`,
+  `GraphUpdated`, `QueryExecuted`, `InferenceFired`, `EntityMerged`.
+- **`AgentRuntime`** — `knowledge_graph` param + `remember(agent_id, fact)` /
+  `recall(agent_id, query)` (lazy per-agent default graph).
+- **`WorkflowEngine`** — `knowledge_graph` param + `execute_with_context(...)`
+  (stamps matching entity_ids into `workflow.context["kg_matches"]`).
+- **`PlanStep.context_graph_id`** (optional) — ADR-024 executor hook.
+- **46 new tests** (knowledge_graph 18, integration 14, store 6, inference 8).
+
+### Honest Notes
+- No real vector DB — similarity is injected embedding or Jaccard token overlap.
+- Inference is rule-based pattern matching, not LLM/SPARQL.
+- Graph is local SQLite only; BFS pathfinding; exact-name dedupe; no temporal
+  validity on relations.
+
 ## [v2.10.0] — 2026-07-24 · Dynamic Planner (ADR-024)
 
 ### Added
