@@ -19,6 +19,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
 
+from kernel.config_domain import ConfigScope
 from kernel.events import EventBus, EventStore, PluginDiscovered, PluginInstallFailed, PluginInstalled
 from kernel.marketplace_domain import (
     CatalogEntry,
@@ -53,6 +54,7 @@ class PluginMarketplace:
         sleep: Callable[..., Awaitable[None]] = asyncio.sleep,
         guard: Any | None = None,
         mcp: Any | None = None,
+        vault: Any | None = None,
     ) -> None:
         self._bus = event_bus
         self._event_store = event_store
@@ -64,6 +66,7 @@ class PluginMarketplace:
         self._sleep = sleep
         self._guard = guard  # ADR-028: optional CapabilityGuard
         self._mcp = mcp  # ADR-029: optional McpGateway
+        self._vault = vault  # ADR-030: optional ConfigVault
         # in-memory caches (mirror store when no persistence)
         self._installed: dict[str, PluginPackage] = {}
         self._catalog: dict[str, CatalogEntry] = {}
@@ -162,6 +165,36 @@ class PluginMarketplace:
             if self._store is not None:
                 self._store.put_package(package)
             return package
+        # ADR-030: if the package declares required_secrets and a vault is wired,
+        # verify every secret exists (scope=PLUGIN, scope_id=package_id) before
+        # installing. Missing any -> PluginInstallFailed(missing_required_secrets).
+        # No vault wired => precondition skipped (zero regression).
+        secrets_resolved = False
+        if package.required_secrets and self._vault is not None:
+            missing: list[str] = []
+            for skey in package.required_secrets:
+                try:
+                    await self._vault.resolve_secret(
+                        skey,
+                        scope=ConfigScope.PLUGIN,
+                        scope_id=package.package_id,
+                        accessor=f"marketplace:{package.package_id}",
+                    )
+                except (KeyError, RuntimeError):
+                    missing.append(skey)
+            if missing:
+                package.status = PluginStatus.FAILED
+                await self._emit(
+                    PluginInstallFailed(
+                        package.package_id,
+                        package.name,
+                        f"missing_required_secrets: {missing}",
+                    )
+                )
+                if self._store is not None:
+                    self._store.put_package(package)
+                return package
+            secrets_resolved = True
         # ADR-028: register the package's sandbox policy with the guard (optional).
         if self._guard is not None and package.policy is not None:
             await self._guard.register_policy(package.package_id, package.policy)
@@ -172,7 +205,15 @@ class PluginMarketplace:
         self._installed[package.package_id] = package
         if self._store is not None:
             self._store.put_package(package)
-        await self._emit(PluginInstalled(package.package_id, package.name, package.version, package.source.value))
+        await self._emit(
+            PluginInstalled(
+                package.package_id,
+                package.name,
+                package.version,
+                package.source.value,
+                secrets_resolved=secrets_resolved,
+            )
+        )
         return package
 
     async def uninstall(self, package_id: str) -> bool:

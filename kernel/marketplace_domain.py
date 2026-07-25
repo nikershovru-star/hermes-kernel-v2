@@ -61,6 +61,10 @@ class PluginPackage(BaseModel):
     # Absence => no guard registered (zero regression; guard treats unknown
     # package as allowed when unwired).
     policy: "SandboxPolicy | None" = None
+    # ADR-030: secret keys this package requires to be present in the vault
+    # (scope=PLUGIN, scope_id=package_id) before installation succeeds. Empty
+    # => no secret preconditions (zero regression).
+    required_secrets: list[str] = Field(default_factory=list)
 
 
 class CatalogEntry(BaseModel):

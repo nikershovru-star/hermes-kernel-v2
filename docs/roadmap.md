@@ -1,6 +1,6 @@
 # Hermes Kernel v2 — Roadmap
 
-_Last updated: 2026-07-25 · **v2.15.0** · 685 passed, 3 skipped, 92% total coverage (CI gate ≥85% ✅)_
+_Last updated: 2026-07-25 · **v2.16.0** · 719 passed, 3 skipped, 92% total coverage (CI gate ≥85% ✅)_
 
 | Phase | Название | Статус | Этапы | Gate |
 |-------|----------|--------|-------|------|
@@ -35,6 +35,7 @@ _Last updated: 2026-07-25 · **v2.15.0** · 685 passed, 3 skipped, 92% total cov
 | ADR-027 | Observability / Metrics | ✅ | `kernel/observability.py` + `kernel/observability_domain.py` + `kernel/observability_store.py` + `kernel/events.py` + `kernel/agent.py` + `kernel/workflow.py` (ObservabilityEngine, ObservabilityStore, 4 events, agent.execute span, wf.executions metrics) | 30 tests, 92% |
 | ADR-028 | Capability Guard (Permission Sandbox) | ✅ | `kernel/security_domain.py` + `kernel/security_store.py` + `kernel/capability_guard.py` + `kernel/marketplace.py` + `kernel/agent.py` + `kernel/workflow.py` (CapabilityGuard, SecurityStore, Permission/SandboxPolicy/AuditEntry, marketplace/agent/workflow wiring) | 46 tests, 91% |
 | ADR-029 | MCP Gateway / Protocol Adapter | ✅ | `kernel/mcp_domain.py` + `kernel/mcp_gateway.py` + `kernel/mcp_store.py` + `kernel/events.py` + `kernel/agent.py` + `kernel/workflow.py` + `kernel/marketplace.py` (McpGateway, McpStore, 5 mcp.* events, mcp:* capability routing, discover_mcp_tools, PluginSource.MCP_SERVER) | 36 tests, 92% |
+| ADR-030 | Configuration & Secrets Platform | ✅ | `kernel/config_domain.py` + `kernel/config_vault.py` + `kernel/config_store.py` + `kernel/events.py` + `kernel/mcp_gateway.py` + `kernel/agent.py` + `kernel/workflow.py` + `kernel/marketplace.py` (ConfigVault, ConfigStore, ConfigScope, 5 cfg.* events, injectable cipher, scope-aware config+secrets, audit log, hot-reload, ${secrets.X}/${config.Y} interpolation) | 34 tests, 93/95/96% |
 
 > \* `kernel/retrieval_backends.py` coverage is **68% on Windows** (sqlite-vss
 > has no Windows wheels → its 3 tests skip). On Linux with `faiss-cpu` +

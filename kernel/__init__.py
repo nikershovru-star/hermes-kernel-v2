@@ -20,6 +20,9 @@ from kernel.marketplace_domain import (
 )
 from kernel.marketplace_store import MarketplaceStore
 from kernel.cluster import ClusterManager
+from kernel.config_domain import ConfigEntry, ConfigScope, SecretRef, SecretValue
+from kernel.config_store import ConfigStore
+from kernel.config_vault import ConfigVault
 from kernel.mcp_domain import McpResource, McpServer, McpSession, McpTool
 from kernel.mcp_gateway import McpGateway
 from kernel.mcp_store import McpStore
@@ -72,4 +75,10 @@ __all__ = [
     "McpTool",
     "McpResource",
     "McpSession",
+    "ConfigVault",
+    "ConfigStore",
+    "ConfigEntry",
+    "SecretRef",
+    "SecretValue",
+    "ConfigScope",
 ]

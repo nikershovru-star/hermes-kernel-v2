@@ -19,8 +19,9 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from kernel.agent import BaseAgent
+from kernel.agent import BaseAgent, _interpolate_value
 from kernel.capability import Capability, CapabilityExecutor
+from kernel.config_domain import ConfigScope
 from kernel.capability_guard import (  # ADR-028 (type only)
     CapabilityGuard,
     PermissionDeniedError,
@@ -80,6 +81,7 @@ class WorkflowEngine:
         observability: "ObservabilityEngine | None" = None,
         guard: "CapabilityGuard | None" = None,
         mcp: "McpGateway | None" = None,
+        vault: "ConfigVault | None" = None,
     ) -> None:
         self._agents = agent_runtime
         self._caps = capability_executor
@@ -95,6 +97,7 @@ class WorkflowEngine:
         self._obs = observability
         self._guard = guard  # ADR-028: optional CapabilityGuard
         self._mcp = mcp  # ADR-029: optional McpGateway
+        self._vault = vault  # ADR-030: optional ConfigVault
         self._instances: dict[str, WorkflowInstance] = {}
 
     # -- adaptive execution (ADR-024) ------------------------------------ #
@@ -295,6 +298,21 @@ class WorkflowEngine:
         if context:
             workflow.context.update(context)
         self._instances[inst.id] = inst
+        # ADR-030: optionally seed the vault with this workflow's declared
+        # defaults as WORKFLOW-scoped config (scope_id = instance id). Only when
+        # a vault is wired AND the workflow carries a `defaults` mapping (extra
+        # field). No-op otherwise (zero regression).
+        if self._vault is not None:
+            defaults = getattr(workflow, "defaults", None)
+            if isinstance(defaults, dict):
+                for dk, dv in defaults.items():
+                    await self._vault.set(
+                        dk,
+                        str(dv),
+                        scope=ConfigScope.WORKFLOW,
+                        scope_id=inst.id,
+                        changed_by=f"workflow:{workflow.id}",
+                    )
         logger.info("WorkflowEngine: started instance %s for workflow %s", inst.id, workflow.id)
         if self._obs is not None:
             await self._obs.log("info", f"workflow started: {workflow.id}", correlation_id=inst.id, context={"steps": len(workflow.steps)})
@@ -370,6 +388,18 @@ class WorkflowEngine:
 
         await self._emit(WorkflowStepStarted(instance.id, step.id, step.capability))
         params = self._resolve_inputs(step, instance, workflow)
+
+        # ADR-030: interpolate ${secrets.X} / ${config.Y} in the resolved step
+        # params via the vault, scoped to this workflow instance. No-op when the
+        # vault is unwired (zero regression — params pass through untouched).
+        if self._vault is not None:
+            params = await _interpolate_value(
+                params,
+                self._vault,
+                ConfigScope.WORKFLOW,
+                instance.id,
+                accessor=f"workflow:{instance.id}",
+            )
 
         # ADR-029: an "mcp:*" step with no gateway wired fails deterministically
         # (WorkflowStepFailed reason "mcp_not_wired", instance -> FAILED) — the

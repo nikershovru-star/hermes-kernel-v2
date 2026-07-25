@@ -21,6 +21,7 @@ import time
 import uuid
 from typing import Any, Awaitable, Callable
 
+from kernel.config_domain import ConfigScope
 from kernel.domain import Artifact
 from kernel.events import (
     EventBus,
@@ -60,6 +61,7 @@ class McpGateway:
         max_retries: int = 2,
         retry_backoff_seconds: float = 0.5,
         timeout_seconds: float = 30.0,
+        vault: Any | None = None,
     ) -> None:
         self._bus = event_bus
         self._event_store = event_store
@@ -71,10 +73,12 @@ class McpGateway:
         self._max_retries = max_retries
         self._retry_backoff = retry_backoff_seconds
         self._timeout = timeout_seconds
+        self._vault = vault  # ADR-030: optional ConfigVault for auth_token resolution
         self._sessions: dict[str, McpSession] = {}  # session_id -> session
         self._by_server: dict[str, str] = {}  # server_url -> active session_id
         self._tools: dict[str, list[McpTool]] = {}  # server_url -> cached tools
         self._auth: dict[str, str] = {}  # server_url -> bearer token
+        self._auth_source: dict[str, str] = {}  # server_url -> "explicit" | "vault" | "none"
 
     # -- JSON-RPC plumbing -------------------------------------------------- #
     async def _rpc(self, server_url: str, method: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -122,9 +126,33 @@ class McpGateway:
 
     # -- lifecycle ------------------------------------------------------------ #
     async def connect(self, server_url: str, auth_token: str | None = None) -> McpSession:
-        """JSON-RPC ``initialize`` handshake. Emits ``McpConnected``."""
+        """JSON-RPC ``initialize`` handshake. Emits ``McpConnected``.
+
+        ADR-030: when ``auth_token`` is None and a ``ConfigVault`` is wired, the
+        gateway tries to resolve ``mcp:{server_url}:auth_token`` from the vault
+        (scope=MCP_SERVER, scope_id=server_url). If found it is used as the
+        bearer token; if not, the connection proceeds without auth (deterministic
+        — no raise). The resolved source is tracked for audit context.
+        """
+        source = "none"
         if auth_token is not None:
             self._auth[server_url] = auth_token
+            source = "explicit"
+        elif self._vault is not None:
+            try:
+                resolved = await self._vault.resolve_secret(
+                    f"mcp:{server_url}:auth_token",
+                    scope=ConfigScope.MCP_SERVER,
+                    scope_id=server_url,
+                    accessor=f"mcp_gateway:{server_url}",
+                )
+            except (KeyError, RuntimeError):
+                resolved = None
+            if resolved is not None:
+                self._auth[server_url] = resolved
+                auth_token = resolved
+                source = "vault"
+        self._auth_source[server_url] = source
         result = await self._rpc(
             server_url,
             "initialize",
@@ -216,7 +244,13 @@ class McpGateway:
             self._store.put_call(uuid.uuid4().hex, session_id, tool_name, args_hash, latency_ms)
         if self._metrics is not None:
             await self._metrics.record_metric(
-                "mcp.tool_latency_ms", latency_ms, labels={"server_url": server_url, "tool": tool_name}
+                "mcp.tool_latency_ms",
+                latency_ms,
+                labels={
+                    "server_url": server_url,
+                    "tool": tool_name,
+                    "mcp_auth_source": self.auth_source(server_url),  # ADR-030 audit context
+                },
             )
         return Artifact(
             type="mcp_tool_result",
@@ -276,6 +310,14 @@ class McpGateway:
 
     def get_session(self, session_id: str) -> McpSession | None:
         return self._sessions.get(session_id)
+
+    def auth_source(self, server_url: str) -> str:
+        """ADR-030: audit context — how the auth token was obtained for a server.
+
+        Returns ``"explicit"`` (passed to connect), ``"vault"`` (resolved from
+        the ConfigVault), or ``"none"`` (no auth / never connected).
+        """
+        return self._auth_source.get(server_url, "none")
 
     # -- helpers ---------------------------------------------------------------------- #
     def _touch(self, session_id: str) -> None:

@@ -691,11 +691,11 @@ class PluginDiscovered(DomainEvent):
 class PluginInstalled(DomainEvent):
     """A plugin package was successfully installed."""
 
-    def __init__(self, package_id: str, name: str, version: str, source: str) -> None:
+    def __init__(self, package_id: str, name: str, version: str, source: str, secrets_resolved: bool = False) -> None:
         super().__init__(
             type="mp.plugin_installed",
             aggregate_id=package_id,
-            payload={"package_id": package_id, "name": name, "version": version, "source": source},
+            payload={"package_id": package_id, "name": name, "version": version, "source": source, "secrets_resolved": secrets_resolved},
         )
 
 
@@ -896,6 +896,83 @@ class McpError(DomainEvent):
         )
 
 
+# --------------------------------------------------------------------------- #
+# ADR-030 — Configuration & Secrets Platform events (cfg.*)
+# --------------------------------------------------------------------------- #
+class ConfigChanged(DomainEvent):
+    """A config value was set / updated / deleted. Keyed on ``scope:scope_id``."""
+
+    def __init__(self, scope: str, scope_id: str | None, key: str, version: int, changed_by: str = "system") -> None:
+        super().__init__(
+            type="cfg.config_changed",
+            aggregate_id=f"{scope}:{scope_id or 'global'}",
+            payload={
+                "key": key,
+                "scope": scope,
+                "scope_id": scope_id,
+                "version": version,
+                "changed_by": changed_by,
+            },
+        )
+
+
+class SecretRotated(DomainEvent):
+    """A secret was re-encrypted with a new value. Keyed on the secret key."""
+
+    def __init__(self, secret_key: str, scope: str, scope_id: str | None, rotated_at: str, version: int = 1) -> None:
+        super().__init__(
+            type="cfg.secret_rotated",
+            aggregate_id=secret_key,
+            payload={
+                "scope": scope,
+                "scope_id": scope_id,
+                "rotated_at": rotated_at,
+                "version": version,
+            },
+        )
+
+
+class SecretAccessed(DomainEvent):
+    """A secret was read/resolved (audit trail). Keyed on the secret key."""
+
+    def __init__(self, secret_key: str, accessor: str, action: str, timestamp: str) -> None:
+        super().__init__(
+            type="cfg.secret_accessed",
+            aggregate_id=secret_key,
+            payload={
+                "accessor": accessor,
+                "action": action,  # "read" | "resolve"
+                "timestamp": timestamp,
+            },
+        )
+
+
+class ConfigReloaded(DomainEvent):
+    """The vault reloaded config from its store into cache. Keyed ``global``."""
+
+    def __init__(self, keys_reloaded: int, source: str = "manual") -> None:
+        super().__init__(
+            type="cfg.config_reloaded",
+            aggregate_id="global",
+            payload={"keys_reloaded": keys_reloaded, "source": source},
+        )
+
+
+class ConfigAccessDenied(DomainEvent):
+    """A principal was denied access to a scoped key. Keyed on the principal."""
+
+    def __init__(self, principal: str, key: str, requested_scope: str, reason: str) -> None:
+        super().__init__(
+            type="cfg.config_access_denied",
+            aggregate_id=principal,
+            payload={
+                "key": key,
+                "requested_scope": requested_scope,
+                "reason": reason,
+            },
+        )
+
+
 __all__ = [
     "DomainEvent",
     "EventStore",
@@ -962,4 +1039,9 @@ __all__ = [
     "McpResourceRead",
     "McpSessionClosed",
     "McpError",
+    "ConfigChanged",
+    "SecretRotated",
+    "SecretAccessed",
+    "ConfigReloaded",
+    "ConfigAccessDenied",
 ]

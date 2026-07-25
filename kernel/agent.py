@@ -12,9 +12,11 @@ AXIS CONTRACT: depends on kernel.domain only. Never imports plugins.
 from __future__ import annotations
 
 import logging
+import re
 from abc import ABC, abstractmethod
 from typing import Any
 
+from kernel.config_domain import ConfigScope
 from kernel.domain import Agent, Artifact, HealthCheck, SandboxPolicy, Task
 from kernel.events import DomainEvent, EventBus, EventStore
 from kernel.health import HealthMonitor
@@ -22,6 +24,61 @@ from kernel.sandbox import Sandbox
 from kernel.capability_guard import CapabilityGuard  # ADR-028 (type only)
 
 logger = logging.getLogger("hermes.kernel.agent")
+
+# ADR-030: interpolation tokens ${secrets.X} / ${config.Y} in task/step params.
+_INTERP_RE = re.compile(r"\$\{(secrets|config)\.([^}]+)\}")
+
+
+async def _interpolate_value(
+    value: Any,
+    vault: Any,
+    scope: ConfigScope,
+    scope_id: str | None,
+    accessor: str,
+) -> Any:
+    """Resolve ``${secrets.X}`` / ``${config.Y}`` tokens in a value via the vault.
+
+    Recurses into dicts/lists. Non-string leaves pass through untouched. A whole
+    string that is exactly one token is replaced by the resolved value (keeping
+    type when possible); embedded tokens are substituted inline as strings.
+    Missing config resolves to an empty string; a missing secret raises KeyError
+    (surfaced honestly, never silently blanked). ``vault=None`` is a no-op — the
+    caller must guard for that (zero regression).
+    """
+    if vault is None:
+        return value
+    if isinstance(value, dict):
+        return {
+            k: await _interpolate_value(v, vault, scope, scope_id, accessor)
+            for k, v in value.items()
+        }
+    if isinstance(value, list):
+        return [
+            await _interpolate_value(v, vault, scope, scope_id, accessor)
+            for v in value
+        ]
+    if not isinstance(value, str):
+        return value
+    matches = list(_INTERP_RE.finditer(value))
+    if not matches:
+        return value
+
+    async def _resolve(kind: str, name: str) -> str:
+        if kind == "secrets":
+            return await vault.resolve_secret(
+                name, scope=scope, scope_id=scope_id, accessor=accessor
+            )
+        resolved = await vault.get(name, scope=scope, scope_id=scope_id, default=None)
+        return "" if resolved is None else str(resolved)
+
+    # exact single-token string → return resolved value directly
+    if len(matches) == 1 and matches[0].span() == (0, len(value)):
+        return await _resolve(matches[0].group(1), matches[0].group(2))
+    # embedded tokens → inline string substitution
+    out = value
+    for m in matches:
+        out = out.replace(m.group(0), await _resolve(m.group(1), m.group(2)))
+    return out
 
 
 class BaseAgent(ABC):
@@ -92,6 +149,7 @@ class AgentRuntime:
         observability: "ObservabilityEngine | None" = None,
         guard: "CapabilityGuard | None" = None,
         mcp: "McpGateway | None" = None,
+        vault: "ConfigVault | None" = None,
     ) -> None:
         self._agents: dict[str, BaseAgent] = {}
         self._bus = bus
@@ -104,6 +162,7 @@ class AgentRuntime:
         self._obs = observability
         self._guard = guard  # ADR-028: optional CapabilityGuard
         self._mcp = mcp  # ADR-029: optional McpGateway
+        self._vault = vault  # ADR-030: optional ConfigVault
         self._swarm_ids: dict[str, str] = {}  # agent_id -> swarm_id
         self._default_graphs: dict[str, str] = {}  # agent_id -> graph_id
 
@@ -175,6 +234,19 @@ class AgentRuntime:
         agent = self._agents.get(agent_id)
         if agent is None:
             raise KeyError(f"agent '{agent_id}' is not running")
+        # ADR-030: interpolate ${secrets.X} / ${config.Y} in task parameters via
+        # the vault, scoped to this agent. No-op when vault is unwired (zero
+        # regression). Applies to the extra `parameters` field and `metadata`.
+        if self._vault is not None:
+            params = getattr(task, "parameters", None)
+            if params is not None:
+                task.parameters = await _interpolate_value(
+                    params, self._vault, ConfigScope.AGENT, agent_id, accessor=agent_id
+                )
+            if task.metadata:
+                task.metadata = await _interpolate_value(
+                    task.metadata, self._vault, ConfigScope.AGENT, agent_id, accessor=agent_id
+                )
         # ADR-029: MCP-backed capability ("mcp:<server_url>::<tool>" or
         # "mcp:<tool>" resolved via the gateway's cached tool map). Deterministic
         # contract: if the capability is namespaced "mcp:" and no gateway is
@@ -286,6 +358,27 @@ class AgentRuntime:
         if server_url is not None:
             return await self._mcp.list_tools(server_url)
         return self._mcp.discover_local_tools()
+
+    # -- config & secrets integration (ADR-030) -- #
+    async def get_config(self, agent_id: str, key: str, default: str | None = None) -> str | None:
+        """Read an agent-scoped config value from the vault (None when unwired)."""
+        if self._vault is None:
+            return default
+        return await self._vault.get(
+            key, scope=ConfigScope.AGENT, scope_id=agent_id, default=default
+        )
+
+    async def resolve_secret(self, agent_id: str, key: str) -> str:
+        """Resolve an agent-scoped secret via the vault (audited).
+
+        Raises ``RuntimeError`` when no vault is wired (honest failure — the
+        caller asked for a secret the runtime cannot provide).
+        """
+        if self._vault is None:
+            raise RuntimeError("AgentRuntime has no ConfigVault wired")
+        return await self._vault.resolve_secret(
+            key, scope=ConfigScope.AGENT, scope_id=agent_id, accessor=agent_id
+        )
 
     # -- swarm integration (ADR-023) -- #
     async def join_swarm(self, agent_id: str, swarm_id: str, role: str = "worker") -> None:

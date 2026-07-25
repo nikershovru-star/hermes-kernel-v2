@@ -4,6 +4,53 @@ All notable changes to Hermes Kernel v2 are documented here. The format is
 loosely based on [Keep a Changelog](https://keepachangelog.com/); this project
 adheres to **semantic versioning** (MAJOR.MINOR.PATCH).
 
+## [v2.16.0] — 2026-07-25 · Configuration & Secrets Platform (ADR-030)
+
+### Added
+- **`kernel/config_domain.py`** — isolated ADR-local models (pattern:
+  `security_domain.py` / `mcp_domain.py`): `ConfigScope` (GLOBAL / AGENT /
+  WORKFLOW / PLUGIN / MCP_SERVER), `ConfigEntry`, `SecretRef`, `SecretValue`
+  (ciphertext/nonce/tag — AES-256-GCM shape), `ConfigChange`.
+- **`kernel/config_vault.py`** — `ConfigVault`: async, fully injectable
+  (`store` / `event_bus` / `event_store` / `clock` / `cipher` / `sleep`).
+  Scope-aware `set` / `get` (never decrypts) / `delete` (soft) / `list_keys` /
+  `set_secret` / `resolve_secret` (decrypts + audits) / `rotate_secret` /
+  `reload` (hot-reload cache) / `get_audit_log`. Encryption via an **injectable
+  async cipher** (`encrypt(str)->bytes` / `decrypt(bytes)->str`); default is a
+  deterministic base64 stub (`_Base64Cipher`) for tests. `resolve_secret` raises
+  `RuntimeError` when no cipher is wired — no silent fallback.
+- **`kernel/config_store.py`** — `ConfigStore`: SQLite (`config` / `secrets` /
+  `config_audit`) + in-memory fallback (`db_path=None`), repo-reload on
+  `db_path`. Rotation overwrites (no history table).
+- **5 events** in `kernel/events.py` (namespaced `cfg.*`): `ConfigChanged`,
+  `SecretRotated`, `SecretAccessed`, `ConfigReloaded`, `ConfigAccessDenied`.
+  `PluginInstalled` gains a `secrets_resolved` payload flag.
+- **Wiring (all optional, `vault=None` default → zero regression):**
+  `McpGateway(vault=)` resolves `mcp:{server_url}:auth_token` from the vault
+  (scope=MCP_SERVER) when no explicit token is passed, tracking auth source
+  (`explicit`/`vault`/`none`); `AgentRuntime(vault=)` gains `get_config` /
+  `resolve_secret` proxies (scope=AGENT) and interpolates `${secrets.X}` /
+  `${config.Y}` in `execute`; `WorkflowEngine(vault=)` interpolates the same
+  tokens in resolved step params (scope=WORKFLOW) and can seed
+  `workflow.defaults`; `PluginMarketplace(vault=)` verifies
+  `package.required_secrets` (scope=PLUGIN) before install, failing with
+  `PluginInstallFailed("missing_required_secrets")` when absent.
+- **`kernel/__init__.py`** exports: `ConfigVault`, `ConfigStore`, `ConfigEntry`,
+  `SecretRef`, `SecretValue`, `ConfigScope`.
+
+### Tests
+- 34 new tests (16 `test_config_vault.py` / 8 `test_config_store.py` /
+  10 `test_config_integration.py`). Total **719 passed, 3 skipped**.
+- Coverage: `config_domain.py` 93%, `config_store.py` 95%, `config_vault.py`
+  96%; project total **92%**. `tach check` green.
+
+### Honest limitations
+- Encryption is AES-256-GCM / Fernet via an injectable cipher, **not** an
+  HSM/KMS integration (default `_Base64Cipher` is a non-secure dev/test stub).
+- No runtime memory zeroing; no distributed consensus (per-node store); secret
+  rotation is manual/triggered (overwrite, no history); scope-based access
+  control (not RBAC); `${...}` interpolation is regex, not a templating engine.
+
 ## [v2.15.0] — 2026-07-25 · MCP Gateway / Protocol Adapter (ADR-029)
 
 ### Added
