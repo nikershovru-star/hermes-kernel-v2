@@ -82,6 +82,7 @@ class WorkflowEngine:
         guard: "CapabilityGuard | None" = None,
         mcp: "McpGateway | None" = None,
         vault: "ConfigVault | None" = None,
+        resilience: "ResilienceEngine | None" = None,
     ) -> None:
         self._agents = agent_runtime
         self._caps = capability_executor
@@ -98,6 +99,7 @@ class WorkflowEngine:
         self._guard = guard  # ADR-028: optional CapabilityGuard
         self._mcp = mcp  # ADR-029: optional McpGateway
         self._vault = vault  # ADR-030: optional ConfigVault
+        self._resilience = resilience  # ADR-031: optional ResilienceEngine (circuit + DLQ)
         self._instances: dict[str, WorkflowInstance] = {}
 
     # -- adaptive execution (ADR-024) ------------------------------------ #
@@ -500,6 +502,21 @@ class WorkflowEngine:
                         error=str(exc),
                     )
                 )
+            # ADR-031: also park the exhausted step in the ResilienceEngine DLQ
+            # (execution-resilience layer, distinct from the ADR-021 dlq above).
+            if self._resilience is not None:
+                await self._resilience.enqueue_dead_letter(
+                    {
+                        "workflow_id": instance.workflow_id,
+                        "instance_id": instance.id,
+                        "step_id": step.id,
+                        "capability": step.capability,
+                        "params": params,
+                    },
+                    error=str(exc),
+                    attempts=attempt,
+                    entry_id=f"res:{instance.id}:{step.id}",
+                )
             await self._emit(WorkflowStalled(instance.id, step.id, str(exc)))
             if step.compensation:
                 await self.compensate(instance, workflow, step.id)
@@ -634,6 +651,25 @@ class WorkflowEngine:
         return params
 
     async def _run_step(
+        self, step: WorkflowStep, params: dict[str, Any], agent: Agent | None, instance: WorkflowInstance | None = None
+    ) -> Artifact:
+        """Execute a step, optionally guarded by an ADR-031 circuit breaker.
+
+        When a ``ResilienceEngine`` is wired, the step body runs inside a
+        per-(workflow, capability) circuit breaker
+        (``wf:{workflow_id}:{capability}``): repeated failures trip the circuit
+        and subsequent calls fail fast with ``CircuitBreakerOpenError`` (which
+        ``execute_step`` catches → WorkflowStepFailed → optional dead-letter).
+        No-op passthrough when unwired (zero regression).
+        """
+        if self._resilience is None:
+            return await self._run_step_inner(step, params, agent, instance)
+        wf_id = instance.workflow_id if instance is not None else "unknown"
+        circuit = f"wf:{wf_id}:{step.capability}"
+        async with self._resilience.call_with_circuit(circuit):
+            return await self._run_step_inner(step, params, agent, instance)
+
+    async def _run_step_inner(
         self, step: WorkflowStep, params: dict[str, Any], agent: Agent | None, instance: WorkflowInstance | None = None
     ) -> Artifact:
         """Execute a step: via MCP gateway (ADR-029), the assigned agent (Task) or CapabilityExecutor."""

@@ -150,6 +150,7 @@ class AgentRuntime:
         guard: "CapabilityGuard | None" = None,
         mcp: "McpGateway | None" = None,
         vault: "ConfigVault | None" = None,
+        resilience: "ResilienceEngine | None" = None,
     ) -> None:
         self._agents: dict[str, BaseAgent] = {}
         self._bus = bus
@@ -163,6 +164,7 @@ class AgentRuntime:
         self._guard = guard  # ADR-028: optional CapabilityGuard
         self._mcp = mcp  # ADR-029: optional McpGateway
         self._vault = vault  # ADR-030: optional ConfigVault
+        self._resilience = resilience  # ADR-031: optional ResilienceEngine (retry)
         self._swarm_ids: dict[str, str] = {}  # agent_id -> swarm_id
         self._default_graphs: dict[str, str] = {}  # agent_id -> graph_id
 
@@ -304,12 +306,12 @@ class AgentRuntime:
                         await self._obs.record_metric("agent.executions", 1.0, labels={"agent_id": agent_id, "capability": task.capability or ""})
                     return result
             if self._sandbox is None:
-                result = await agent.execute(agent_id, task)
+                result = await self._execute_with_retry(agent, agent_id, task)
             else:
                 # Sandboxed execution: breach cancels + stops the agent (cleanup hook).
                 policy = policy or self._default_policy(agent)
                 result = await self._sandbox.run(
-                    agent.execute(agent_id, task),
+                    self._execute_with_retry(agent, agent_id, task),
                     policy=policy,
                     cleanup=lambda: agent.stop(agent_id),
                     context={"agent_id": agent_id, "task_id": task.id},
@@ -329,6 +331,30 @@ class AgentRuntime:
     def _default_policy(agent: BaseAgent) -> SandboxPolicy:
         """Permissive default policy (ADR-020): no network/subprocess limits."""
         return SandboxPolicy()
+
+    # -- resilience integration (ADR-031) -- #
+    async def _execute_with_retry(self, agent: BaseAgent, agent_id: str, task: Task) -> Artifact:
+        """Run ``agent.execute`` optionally wrapped in ADR-031 retry.
+
+        When a ``ResilienceEngine`` is wired, transient failures are retried
+        with deterministic backoff (``task_id = agent_id:task.id``). Without a
+        resilience engine this is a direct passthrough (zero regression).
+        """
+        if self._resilience is None:
+            return await agent.execute(agent_id, task)
+        return await self._resilience.retry(
+            lambda: agent.execute(agent_id, task),
+            task_id=f"{agent_id}:{task.id}",
+        )
+
+    def get_circuit_status(self, name: str):
+        """Proxy to the wired ResilienceEngine's circuit status (ADR-031).
+
+        Raises ``RuntimeError`` when no resilience engine is wired.
+        """
+        if self._resilience is None:
+            raise RuntimeError("AgentRuntime has no ResilienceEngine wired")
+        return self._resilience.get_circuit_status(name)
 
     # -- MCP gateway integration (ADR-029) -- #
     async def _execute_mcp(self, task: Task) -> Artifact:

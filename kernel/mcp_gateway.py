@@ -34,6 +34,7 @@ from kernel.events import (
 )
 from kernel.mcp_domain import McpResource, McpServer, McpSession, McpTool
 from kernel.mcp_store import McpStore
+from kernel.resilience_domain import CircuitBreakerOpenError, RetryExhaustedError
 
 MCP_PROTOCOL_VERSION = "2024-11-05"
 
@@ -62,6 +63,7 @@ class McpGateway:
         retry_backoff_seconds: float = 0.5,
         timeout_seconds: float = 30.0,
         vault: Any | None = None,
+        resilience: Any | None = None,
     ) -> None:
         self._bus = event_bus
         self._event_store = event_store
@@ -74,6 +76,7 @@ class McpGateway:
         self._retry_backoff = retry_backoff_seconds
         self._timeout = timeout_seconds
         self._vault = vault  # ADR-030: optional ConfigVault for auth_token resolution
+        self._resilience = resilience  # ADR-031: optional ResilienceEngine (circuit + retry)
         self._sessions: dict[str, McpSession] = {}  # session_id -> session
         self._by_server: dict[str, str] = {}  # server_url -> active session_id
         self._tools: dict[str, list[McpTool]] = {}  # server_url -> cached tools
@@ -220,10 +223,25 @@ class McpGateway:
         ).hexdigest()[:16]
         started = self._clock()
         try:
-            result = await self._rpc(
-                server_url, "tools/call", {"name": tool_name, "arguments": arguments}
-            )
-        except McpGatewayError as exc:
+            if self._resilience is not None:
+                # ADR-031: guard the call with a per-server circuit breaker and
+                # (optionally) retry transient failures. The circuit sees the
+                # McpGatewayError raised by _rpc so it can count failures / trip.
+                async def _do_rpc():
+                    return await self._rpc(
+                        server_url, "tools/call", {"name": tool_name, "arguments": arguments}
+                    )
+
+                async def _guarded():
+                    async with self._resilience.call_with_circuit(f"mcp:{server_url}"):
+                        return await _do_rpc()
+
+                result = await self._resilience.retry(_guarded, task_id=f"mcp:{server_url}:{tool_name}")
+            else:
+                result = await self._rpc(
+                    server_url, "tools/call", {"name": tool_name, "arguments": arguments}
+                )
+        except (McpGatewayError, CircuitBreakerOpenError, RetryExhaustedError) as exc:
             latency_ms = (self._clock() - started) * 1000.0
             if self._store is not None:
                 self._store.put_call(uuid.uuid4().hex, session_id, tool_name, args_hash, latency_ms, error=str(exc))

@@ -20,7 +20,14 @@ from kernel.marketplace_domain import (
 )
 from kernel.marketplace_store import MarketplaceStore
 from kernel.cluster import ClusterManager
-from kernel.config_domain import ConfigEntry, ConfigScope, SecretRef, SecretValue
+from kernel.resilience import ResilienceEngine
+from kernel.resilience_domain import (
+    CircuitState,
+    ResilienceCircuitConfig,
+    ResilienceDeadLetterEntry,
+    ResilienceRetryPolicy,
+)
+from kernel.resilience_store import ResilienceStore
 from kernel.config_store import ConfigStore
 from kernel.config_vault import ConfigVault
 from kernel.mcp_domain import McpResource, McpServer, McpSession, McpTool
@@ -81,4 +88,10 @@ __all__ = [
     "SecretRef",
     "SecretValue",
     "ConfigScope",
+    "ResilienceEngine",
+    "ResilienceStore",
+    "ResilienceCircuitConfig",
+    "ResilienceRetryPolicy",
+    "ResilienceDeadLetterEntry",
+    "CircuitState",
 ]

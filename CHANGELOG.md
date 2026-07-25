@@ -4,6 +4,42 @@ All notable changes to Hermes Kernel v2 are documented here. The format is
 loosely based on [Keep a Changelog](https://keepachangelog.com/); this project
 adheres to **semantic versioning** (MAJOR.MINOR.PATCH).
 
+## [v2.17.0] — 2026-07-26 · Resilience Platform (ADR-031)
+
+### Added
+- **`kernel/resilience_domain.py`** — isolated resilience models with the
+  `Resilience*` prefix (`CircuitState`, `ResilienceCircuitConfig`,
+  `ResilienceRetryPolicy`, `ResilienceDeadLetterEntry`, `CircuitBreakerOpenError`,
+  `RetryExhaustedError`) to avoid collision with ADR-021 `RetryPolicy` /
+  `DeadLetterEntry` in `kernel.domain`. Deterministic exponential backoff.
+- **`kernel/resilience.py`** — `ResilienceEngine`: `register_circuit`,
+  `call_with_circuit` (async context manager, CLOSED→OPEN→HALF_OPEN→CLOSED),
+  `retry` (deterministic backoff + retryable allow-list), dead-letter
+  `enqueue/replay/discard/list`, `get_circuit_status`. Fully injectable
+  `clock` / `sleep` / `store` / `event_bus` / `event_store` / `metrics`.
+- **`kernel/resilience_store.py`** — `ResilienceStore`: SQLite (`circuits` /
+  `retries` / `dead_letter`) + pure in-memory fallback, repo-reload.
+- **5 events**, namespaced `res.*`: `CircuitBreakerOpened`, `CircuitBreakerClosed`,
+  `RetryAttempted`, `RetryExhausted`, `DeadLetterEnqueued` (`kernel/events.py`).
+- **Integration (all optional, zero regression):**
+  - `McpGateway(resilience=)` — `call_tool` guarded by circuit `mcp:{server_url}`
+    + retry; circuit-open / exhausted → deterministic error `Artifact`.
+  - `WorkflowEngine(resilience=)` — step wrapped in circuit
+    `wf:{workflow_id}:{capability}`; exhaustion additionally parks into the
+    resilience DLQ.
+  - `AgentRuntime(resilience=)` — `execute` through `retry`; `get_circuit_status`
+    proxy.
+- **Tests:** 36 new (17 engine + 9 store + 11 integration) → **753 passed,
+  3 skipped**.
+- **Coverage:** `resilience.py` 90%, `resilience_domain.py` 98%,
+  `resilience_store.py` 98%, total **92%**.
+
+### Honest limitations
+- Circuit state is in-memory per node — no distributed consensus.
+- Backoff is deterministic exponential, without jitter.
+- DLQ replay is manual / triggered — no automatic poller.
+- Execution resilience, not isolation — does NOT replace the ADR-020 sandbox.
+
 ## [v2.16.0] — 2026-07-25 · Configuration & Secrets Platform (ADR-030)
 
 ### Added

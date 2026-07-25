@@ -973,6 +973,64 @@ class ConfigAccessDenied(DomainEvent):
         )
 
 
+# --------------------------------------------------------------------------- #
+# ADR-031 — Resilience Platform events (namespaced ``res.*``)                  #
+# --------------------------------------------------------------------------- #
+class CircuitBreakerOpened(DomainEvent):
+    """A circuit breaker tripped CLOSED/HALF_OPEN → OPEN. Keyed on circuit name."""
+
+    def __init__(self, circuit_name: str, failure_count: int, threshold: int) -> None:
+        super().__init__(
+            type="res.circuit_opened",
+            aggregate_id=circuit_name,
+            payload={"circuit_name": circuit_name, "failure_count": failure_count, "threshold": threshold},
+        )
+
+
+class CircuitBreakerClosed(DomainEvent):
+    """A circuit breaker recovered HALF_OPEN → CLOSED. Keyed on circuit name."""
+
+    def __init__(self, circuit_name: str, from_state: str = "half_open") -> None:
+        super().__init__(
+            type="res.circuit_closed",
+            aggregate_id=circuit_name,
+            payload={"circuit_name": circuit_name, "from_state": from_state},
+        )
+
+
+class RetryAttempted(DomainEvent):
+    """A retryable call failed and will be retried. Keyed on the task id."""
+
+    def __init__(self, task_id: str, attempt: int, backoff_ms: int, error: str) -> None:
+        super().__init__(
+            type="res.retry_attempted",
+            aggregate_id=task_id,
+            payload={"attempt": attempt, "backoff_ms": backoff_ms, "error": error},
+        )
+
+
+class RetryExhausted(DomainEvent):
+    """All retry attempts were exhausted. Keyed on the task id."""
+
+    def __init__(self, task_id: str, total_attempts: int, last_error: str) -> None:
+        super().__init__(
+            type="res.retry_exhausted",
+            aggregate_id=task_id,
+            payload={"total_attempts": total_attempts, "last_error": last_error},
+        )
+
+
+class DeadLetterEnqueued(DomainEvent):
+    """A failed task was parked in the dead-letter queue. Keyed on the entry id."""
+
+    def __init__(self, entry_id: str, error: str, attempts: int) -> None:
+        super().__init__(
+            type="res.dead_letter_enqueued",
+            aggregate_id=entry_id,
+            payload={"entry_id": entry_id, "error": error, "attempts": attempts},
+        )
+
+
 __all__ = [
     "DomainEvent",
     "EventStore",
@@ -1044,4 +1102,9 @@ __all__ = [
     "SecretAccessed",
     "ConfigReloaded",
     "ConfigAccessDenied",
+    "CircuitBreakerOpened",
+    "CircuitBreakerClosed",
+    "RetryAttempted",
+    "RetryExhausted",
+    "DeadLetterEnqueued",
 ]
